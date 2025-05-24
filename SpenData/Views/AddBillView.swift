@@ -137,7 +137,7 @@ struct AddBillView: View {
             return
         }
         
-        guard let amountValue = Double(amount) else {
+        guard let amountValue = FormattingUtils.parseNumber(amount) else {
             alertMessage = "Please enter a valid amount"
             showingAlert = true
             return
@@ -151,18 +151,52 @@ struct AddBillView: View {
             }
         }
         
+        let recurrenceString = recurrence.rawValue
+        let firstDate = firstInstallment
+        let maxMonthsAhead = 24
+        let calendar = Calendar.current
+        var billsToInsert: [Bill] = []
+        
+        // Always insert the first instance
         let newBill = Bill(
             name: name,
             amount: amountValue,
             category: category.rawValue,
             issuer: issuer,
-            firstInstallment: firstInstallment,
-            recurrence: recurrence.rawValue,
+            firstInstallment: firstDate,
+            recurrence: recurrenceString,
             isShared: isShared,
             numberOfShares: numberOfShares
         )
+        billsToInsert.append(newBill)
         
-        modelContext.insert(newBill)
+        // Generate future instances if recurring
+        if recurrence != .custom && recurrence != .custom {
+            if let recurrenceEnum = BillRecurrence(rawValue: recurrenceString) {
+                var currentDate = firstDate
+                for _ in 1...maxMonthsAhead {
+                    let nextDate = recurrenceEnum.nextDueDate(from: currentDate)
+                    // Stop if nextDate is not after currentDate (safety for custom)
+                    if nextDate <= currentDate { break }
+                    let futureBill = Bill(
+                        name: name,
+                        amount: amountValue,
+                        category: category.rawValue,
+                        issuer: issuer,
+                        firstInstallment: nextDate,
+                        recurrence: recurrenceString,
+                        isShared: isShared,
+                        numberOfShares: numberOfShares
+                    )
+                    billsToInsert.append(futureBill)
+                    currentDate = nextDate
+                }
+            }
+        }
+        
+        for bill in billsToInsert {
+            modelContext.insert(bill)
+        }
         
         do {
             try modelContext.save()

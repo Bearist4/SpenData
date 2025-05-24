@@ -8,6 +8,11 @@
 import SwiftUI
 import SwiftData
 import UserNotifications
+import AppIntents
+
+extension Notification.Name {
+    static let transactionDataDidChange = Notification.Name("transactionDataDidChange")
+}
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
@@ -36,27 +41,19 @@ struct SpenDataApp: App {
     
     init() {
         do {
-            // Create schema with our models
             let schema = Schema([
                 User.self,
-                Bill.self
+                Transaction.self,
+                Bill.self,
+                BillBudget.self,
+                TransactionBudget.self
             ])
             
-            // Configure for CloudKit
-            let config = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: false,
-                allowsSave: true,
-                cloudKitDatabase: .private("iCloud.Bearista.SpenData")
-            )
+            let modelConfiguration = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
             
-            // Initialize container
-            modelContainer = try ModelContainer(
-                for: schema,
-                configurations: config
-            )
+            modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
             
-            print("Successfully initialized ModelContainer with CloudKit")
+            print("Successfully initialized ModelContainer")
             
         } catch {
             print("ModelContainer initialization error: \(error)")
@@ -65,7 +62,7 @@ struct SpenDataApp: App {
             do {
                 let inMemoryConfig = ModelConfiguration(isStoredInMemoryOnly: true)
                 modelContainer = try ModelContainer(
-                    for: User.self, Bill.self,
+                    for: User.self, Bill.self, Transaction.self, BillBudget.self, TransactionBudget.self,
                     configurations: inMemoryConfig
                 )
                 print("Successfully initialized in-memory ModelContainer")
@@ -78,9 +75,9 @@ struct SpenDataApp: App {
     
     var body: some Scene {
         WindowGroup {
-            WelcomeView()
-                .onReceive(NotificationCenter.default.publisher(for: .billDataDidChange)) { _ in
-                    // Refresh the view when bill data changes
+            ContentView()
+                .onReceive(NotificationCenter.default.publisher(for: .transactionDataDidChange)) { _ in
+                    // Refresh the view when transaction data changes
                     try? modelContainer.mainContext.save()
                 }
                 .task {
@@ -93,5 +90,35 @@ struct SpenDataApp: App {
                 }
         }
         .modelContainer(modelContainer)
+    }
+}
+
+// MARK: - App Shortcuts Provider
+struct AppShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+        return [
+            AppShortcut(
+                intent: LogTransactionIntent(),
+                phrases: [
+                    "Log transaction in ${applicationName}",
+                    "Add transaction to ${applicationName}",
+                    "Record transaction in ${applicationName}",
+                    "Save transaction to ${applicationName}",
+                    "Create transaction in ${applicationName}"
+                ],
+                shortTitle: "Log Transaction",
+                systemImageName: "plus.circle"
+            ),
+            AppShortcut(
+                intent: TestTransactionIntent(),
+                phrases: [
+                    "Test transaction in ${applicationName}",
+                    "Create test transaction in ${applicationName}",
+                    "Simulate transaction in ${applicationName}"
+                ],
+                shortTitle: "Test Transaction",
+                systemImageName: "creditcard"
+            )
+        ]
     }
 }

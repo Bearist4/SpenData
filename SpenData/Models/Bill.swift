@@ -92,6 +92,7 @@ final class Bill {
     var recurrence: String?
     var isShared: Bool = false
     var numberOfShares: Int = 1
+    var isPaid: Bool = false
     
     // Relationship to User
     @Relationship(inverse: \User.bills) var user: User?
@@ -104,7 +105,8 @@ final class Bill {
          firstInstallment: Date,
          recurrence: String,
          isShared: Bool = false,
-         numberOfShares: Int = 1) {
+         numberOfShares: Int = 1,
+         isPaid: Bool = false) {
         self.id = id
         self.name = name
         self.amount = amount
@@ -114,6 +116,7 @@ final class Bill {
         self.recurrence = recurrence
         self.isShared = isShared
         self.numberOfShares = numberOfShares
+        self.isPaid = isPaid
     }
     
     // MARK: - Secure Storage Methods
@@ -138,7 +141,8 @@ final class Bill {
             "firstInstallment": String(firstInstallment.timeIntervalSince1970),
             "recurrence": recurrence ?? "",
             "isShared": String(isShared),
-            "numberOfShares": String(numberOfShares)
+            "numberOfShares": String(numberOfShares),
+            "isPaid": String(isPaid)
         ]
         
         // Debug: Print the data being sent
@@ -153,6 +157,7 @@ final class Bill {
         print("Recurrence: \(recurrence ?? "nil")")
         print("Is Shared: \(isShared)")
         print("Number of Shares: \(numberOfShares)")
+        print("Is Paid: \(isPaid)")
         
         // Create CloudKit-safe key
         let cloudKitKey = createCloudKitKey()
@@ -202,6 +207,9 @@ final class Bill {
                let shares = Int(sharesStr) {
                 self.numberOfShares = shares
             }
+            if let isPaidStr = billDict["isPaid"] {
+                self.isPaid = isPaidStr == "true"
+            }
         } catch {
             // If Keychain fails, try iCloud
             do {
@@ -231,6 +239,9 @@ final class Bill {
                 if let sharesStr = billDict["numberOfShares"],
                    let shares = Int(sharesStr) {
                     self.numberOfShares = shares
+                }
+                if let isPaidStr = billDict["isPaid"] {
+                    self.isPaid = isPaidStr == "true"
                 }
             } catch {
                 // If both fail, keep the current data

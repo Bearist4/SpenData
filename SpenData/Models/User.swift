@@ -12,14 +12,22 @@ final class User {
     var lastLoginDate: Date = Date()
     var deviceIdentifier: String = UIDevice.current.identifierForVendor?.uuidString ?? UUID().uuidString
     
-    // Relationship to Bills
+    // Relationships
     @Relationship(deleteRule: .cascade) var bills: [Bill]?
+    @Relationship(deleteRule: .cascade) var transactions: [Transaction]?
+    @Relationship(deleteRule: .cascade) var billBudgets: [BillBudget]?
+    @Relationship(deleteRule: .cascade) var transactionBudgets: [TransactionBudget]?
     
-    init(id: String, email: String, name: String) {
+    init(id: String = UUID().uuidString,
+         email: String,
+         name: String) {
         self.id = id
         self.email = email
         self.name = name
         self.bills = []
+        self.transactions = []
+        self.billBudgets = []
+        self.transactionBudgets = []
     }
     
     // MARK: - Secure Storage Methods

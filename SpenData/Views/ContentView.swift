@@ -5,7 +5,6 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var user: [User]
     @Environment(\.dismiss) private var dismiss
-    @State private var showingAddBill = false
     
     var body: some View {
         TabView {
@@ -18,8 +17,10 @@ struct ContentView: View {
                 .tabItem {
                     Label("Transactions", systemImage: "list.bullet")
                 }
-                .sheet(isPresented: $showingAddBill) {
-                    AddBillView()
+            
+            BudgetsView()
+                .tabItem {
+                    Label("Budgets", systemImage: "dollarsign.circle.fill")
                 }
             
             SettingsView()
