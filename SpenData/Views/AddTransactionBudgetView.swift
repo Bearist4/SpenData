@@ -49,17 +49,31 @@ struct AddTransactionBudgetView: View {
         guard let limitValue = FormattingUtils.parseNumber(limit), limitValue > 0 else { return }
         guard let user = users.first else { return }
 
-        let budget = TransactionBudget(
-            category: category.rawValue,
-            limit: limitValue,
-            period: period
-        )
+        // Check if a budget already exists for this category
+        let categoryString = category.rawValue
+        let predicate = #Predicate<TransactionBudget> { budget in
+            budget.category == categoryString
+        }
+        let existingBudgets = try? modelContext.fetch(FetchDescriptor<TransactionBudget>(predicate: predicate))
         
-        // Associate budget with user
-        budget.user = user
-        user.transactionBudgets?.append(budget)
+        if let existingBudget = existingBudgets?.first {
+            // Update existing budget
+            existingBudget.limit = limitValue
+            existingBudget.period = period.rawValue
+        } else {
+            // Create new budget
+            let budget = TransactionBudget(
+                category: category.rawValue,
+                limit: limitValue,
+                period: period
+            )
+            
+            // Associate budget with user
+            budget.user = user
+            user.transactionBudgets?.append(budget)
+            modelContext.insert(budget)
+        }
 
-        modelContext.insert(budget)
         try? modelContext.save()
         dismiss()
     }

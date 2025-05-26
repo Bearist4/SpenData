@@ -41,6 +41,10 @@ struct SettingsView: View {
                     NavigationLink(destination: BillsListView()) {
                         Label("Bills", systemImage: "list.bullet")
                     }
+                    
+                    NavigationLink(destination: TransactionBudgetsListView()) {
+                        Label("Transaction Budgets", systemImage: "dollarsign.circle")
+                    }
                 }
                 
                 Section {
@@ -224,6 +228,151 @@ struct CategoryBillsView: View {
             try modelContext.save()
         } catch {
             print("Error deleting bills: \(error)")
+        }
+    }
+}
+
+struct TransactionBudgetsListView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query private var transactionBudgets: [TransactionBudget]
+    @State private var showingAddBudget = false
+    @State private var showingEditBudget = false
+    @State private var selectedBudget: TransactionBudget?
+    
+    private var explicitBudgets: [TransactionBudget] {
+        transactionBudgets.filter { budget in
+            guard let limit = budget.limit else { return false }
+            return limit > 0
+        }
+    }
+    
+    var body: some View {
+        List {
+            ForEach(explicitBudgets) { budget in
+                Button {
+                    selectedBudget = budget
+                    showingEditBudget = true
+                } label: {
+                    HStack {
+                        Circle()
+                            .fill(TransactionCategory(rawValue: budget.category ?? "")?.color ?? .gray)
+                            .frame(width: 12, height: 12)
+                        VStack(alignment: .leading) {
+                            Text(budget.category ?? "Uncategorized")
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                            if let period = budget.period {
+                                Text(period)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer()
+                        if let limit = budget.limit {
+                            Text(FormattingUtils.formatCurrency(limit))
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+            .onDelete(perform: deleteBudgets)
+        }
+        .navigationTitle("Transaction Budgets")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showingAddBudget = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showingAddBudget) {
+            AddTransactionBudgetView()
+        }
+        .sheet(isPresented: $showingEditBudget) {
+            if let budget = selectedBudget {
+                EditTransactionBudgetView(budget: budget)
+            }
+        }
+    }
+    
+    private func deleteBudgets(at offsets: IndexSet) {
+        for index in offsets {
+            let budget = explicitBudgets[index]
+            modelContext.delete(budget)
+        }
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error deleting budgets: \(error)")
+        }
+    }
+}
+
+struct EditTransactionBudgetView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    
+    let budget: TransactionBudget
+    
+    @State private var category: String
+    @State private var limit: String
+    @State private var period: BudgetPeriod
+    
+    init(budget: TransactionBudget) {
+        self.budget = budget
+        _category = State(initialValue: budget.category ?? TransactionCategory.uncategorized.rawValue)
+        _limit = State(initialValue: String(budget.limit ?? 0))
+        _period = State(initialValue: BudgetPeriod(rawValue: budget.period ?? "") ?? .monthly)
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("Category", selection: $category) {
+                    ForEach(TransactionCategory.allCases, id: \.self) { category in
+                        Text(category.rawValue).tag(category.rawValue)
+                    }
+                }
+                
+                TextField("Limit", text: $limit)
+                    .keyboardType(.decimalPad)
+                
+                Picker("Period", selection: $period) {
+                    Text("Weekly").tag(BudgetPeriod.weekly)
+                    Text("Monthly").tag(BudgetPeriod.monthly)
+                    Text("Yearly").tag(BudgetPeriod.yearly)
+                }
+            }
+            .navigationTitle("Edit Budget")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveBudget()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func saveBudget() {
+        if let limitValue = FormattingUtils.parseNumber(limit) {
+            budget.category = category
+            budget.limit = limitValue
+            budget.period = period.rawValue
+            
+            try? modelContext.save()
+            dismiss()
         }
     }
 }

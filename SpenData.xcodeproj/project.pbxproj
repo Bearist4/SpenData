@@ -6,7 +6,22 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		B523B6BC2DE38A6000CEF00C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B523B6BB2DE38A5F00CEF00C /* WidgetKit.framework */; };
+		B523B6BE2DE38A6000CEF00C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B523B6BD2DE38A6000CEF00C /* SwiftUI.framework */; };
+		B523B6CF2DE38A6200CEF00C /* TransactionBudgetWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B523B6B92DE38A5F00CEF00C /* TransactionBudgetWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B523B6DD2DE3910000CEF00C /* SpenDataModels in Frameworks */ = {isa = PBXBuildFile; productRef = B523B6DC2DE3910000CEF00C /* SpenDataModels */; };
+		B523B6DF2DE3916500CEF00C /* SpenDataModels in Frameworks */ = {isa = PBXBuildFile; productRef = B523B6DE2DE3916500CEF00C /* SpenDataModels */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		B523B6CD2DE38A6200CEF00C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B53F67822DDF92C600B7B18E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B523B6B82DE38A5F00CEF00C;
+			remoteInfo = TransactionBudgetWidgetExtension;
+		};
 		B53F679A2DDF92C900B7B18E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = B53F67822DDF92C600B7B18E /* Project object */;
@@ -23,13 +38,39 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		B523B6D42DE38A6200CEF00C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B523B6CF2DE38A6200CEF00C /* TransactionBudgetWidgetExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		B523B6B92DE38A5F00CEF00C /* TransactionBudgetWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TransactionBudgetWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B523B6BB2DE38A5F00CEF00C /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		B523B6BD2DE38A6000CEF00C /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
+		B523B6D82DE38EBD00CEF00C /* SpenDataModels */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = SpenDataModels; path = ../SpenDataModels; sourceTree = SOURCE_ROOT; };
 		B53F678A2DDF92C600B7B18E /* SpenData.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpenData.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B53F67992DDF92C900B7B18E /* SpenDataTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpenDataTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		B53F67A32DDF92C900B7B18E /* SpenDataUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpenDataUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B5A15DC42DE4549400E78CDD /* TransactionBudgetWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TransactionBudgetWidgetExtension.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		B523B6D32DE38A6200CEF00C /* Exceptions for "TransactionBudgetWidget" folder in "TransactionBudgetWidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = B523B6B82DE38A5F00CEF00C /* TransactionBudgetWidgetExtension */;
+		};
 		B53F67C32DDF94E300B7B18E /* Exceptions for "SpenData" folder in "SpenData" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -41,6 +82,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		B523B6BF2DE38A6000CEF00C /* TransactionBudgetWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				B523B6D32DE38A6200CEF00C /* Exceptions for "TransactionBudgetWidget" folder in "TransactionBudgetWidgetExtension" target */,
+			);
+			path = TransactionBudgetWidget;
+			sourceTree = "<group>";
+		};
 		B53F678C2DDF92C600B7B18E /* SpenData */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -62,10 +111,21 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		B523B6B62DE38A5F00CEF00C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B523B6BE2DE38A6000CEF00C /* SwiftUI.framework in Frameworks */,
+				B523B6BC2DE38A6000CEF00C /* WidgetKit.framework in Frameworks */,
+				B523B6DF2DE3916500CEF00C /* SpenDataModels in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B53F67872DDF92C600B7B18E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B523B6DD2DE3910000CEF00C /* SpenDataModels in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -86,12 +146,25 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		B523B6BA2DE38A5F00CEF00C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B523B6BB2DE38A5F00CEF00C /* WidgetKit.framework */,
+				B523B6BD2DE38A6000CEF00C /* SwiftUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		B53F67812DDF92C600B7B18E = {
 			isa = PBXGroup;
 			children = (
+				B5A15DC42DE4549400E78CDD /* TransactionBudgetWidgetExtension.entitlements */,
+				B523B6D82DE38EBD00CEF00C /* SpenDataModels */,
 				B53F678C2DDF92C600B7B18E /* SpenData */,
 				B53F679C2DDF92C900B7B18E /* SpenDataTests */,
 				B53F67A62DDF92C900B7B18E /* SpenDataUITests */,
+				B523B6BF2DE38A6000CEF00C /* TransactionBudgetWidget */,
+				B523B6BA2DE38A5F00CEF00C /* Frameworks */,
 				B53F678B2DDF92C600B7B18E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -102,6 +175,7 @@
 				B53F678A2DDF92C600B7B18E /* SpenData.app */,
 				B53F67992DDF92C900B7B18E /* SpenDataTests.xctest */,
 				B53F67A32DDF92C900B7B18E /* SpenDataUITests.xctest */,
+				B523B6B92DE38A5F00CEF00C /* TransactionBudgetWidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -109,6 +183,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		B523B6B82DE38A5F00CEF00C /* TransactionBudgetWidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B523B6D02DE38A6200CEF00C /* Build configuration list for PBXNativeTarget "TransactionBudgetWidgetExtension" */;
+			buildPhases = (
+				B523B6B52DE38A5F00CEF00C /* Sources */,
+				B523B6B62DE38A5F00CEF00C /* Frameworks */,
+				B523B6B72DE38A5F00CEF00C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B523B6BF2DE38A6000CEF00C /* TransactionBudgetWidget */,
+			);
+			name = TransactionBudgetWidgetExtension;
+			packageProductDependencies = (
+				B523B6DE2DE3916500CEF00C /* SpenDataModels */,
+			);
+			productName = TransactionBudgetWidgetExtension;
+			productReference = B523B6B92DE38A5F00CEF00C /* TransactionBudgetWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		B53F67892DDF92C600B7B18E /* SpenData */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B53F67AD2DDF92C900B7B18E /* Build configuration list for PBXNativeTarget "SpenData" */;
@@ -116,16 +213,19 @@
 				B53F67862DDF92C600B7B18E /* Sources */,
 				B53F67872DDF92C600B7B18E /* Frameworks */,
 				B53F67882DDF92C600B7B18E /* Resources */,
+				B523B6D42DE38A6200CEF00C /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B523B6CE2DE38A6200CEF00C /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				B53F678C2DDF92C600B7B18E /* SpenData */,
 			);
 			name = SpenData;
 			packageProductDependencies = (
+				B523B6DC2DE3910000CEF00C /* SpenDataModels */,
 			);
 			productName = SpenData;
 			productReference = B53F678A2DDF92C600B7B18E /* SpenData.app */;
@@ -187,6 +287,9 @@
 				LastSwiftUpdateCheck = 1630;
 				LastUpgradeCheck = 1630;
 				TargetAttributes = {
+					B523B6B82DE38A5F00CEF00C = {
+						CreatedOnToolsVersion = 16.3;
+					};
 					B53F67892DDF92C600B7B18E = {
 						CreatedOnToolsVersion = 16.3;
 					};
@@ -209,6 +312,9 @@
 			);
 			mainGroup = B53F67812DDF92C600B7B18E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B523B6DB2DE3910000CEF00C /* XCLocalSwiftPackageReference "../SpenDataModels" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B53F678B2DDF92C600B7B18E /* Products */;
 			projectDirPath = "";
@@ -217,11 +323,19 @@
 				B53F67892DDF92C600B7B18E /* SpenData */,
 				B53F67982DDF92C900B7B18E /* SpenDataTests */,
 				B53F67A22DDF92C900B7B18E /* SpenDataUITests */,
+				B523B6B82DE38A5F00CEF00C /* TransactionBudgetWidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		B523B6B72DE38A5F00CEF00C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B53F67882DDF92C600B7B18E /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -246,6 +360,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		B523B6B52DE38A5F00CEF00C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		B53F67862DDF92C600B7B18E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -270,6 +391,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		B523B6CE2DE38A6200CEF00C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B523B6B82DE38A5F00CEF00C /* TransactionBudgetWidgetExtension */;
+			targetProxy = B523B6CD2DE38A6200CEF00C /* PBXContainerItemProxy */;
+		};
 		B53F679B2DDF92C900B7B18E /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = B53F67892DDF92C600B7B18E /* SpenData */;
@@ -283,6 +409,62 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		B523B6D12DE38A6200CEF00C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = TransactionBudgetWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UV5KDNCKWS;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TransactionBudgetWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TransactionBudgetWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Bearista.SpenData.TransactionBudgetWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B523B6D22DE38A6200CEF00C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = TransactionBudgetWidgetExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = UV5KDNCKWS;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = TransactionBudgetWidget/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = TransactionBudgetWidget;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Bearista.SpenData.TransactionBudgetWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		B53F67AB2DDF92C900B7B18E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -541,6 +723,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		B523B6D02DE38A6200CEF00C /* Build configuration list for PBXNativeTarget "TransactionBudgetWidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B523B6D12DE38A6200CEF00C /* Debug */,
+				B523B6D22DE38A6200CEF00C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		B53F67852DDF92C600B7B18E /* Build configuration list for PBXProject "SpenData" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -578,6 +769,24 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		B523B6DB2DE3910000CEF00C /* XCLocalSwiftPackageReference "../SpenDataModels" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../SpenDataModels;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B523B6DC2DE3910000CEF00C /* SpenDataModels */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SpenDataModels;
+		};
+		B523B6DE2DE3916500CEF00C /* SpenDataModels */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SpenDataModels;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = B53F67822DDF92C600B7B18E /* Project object */;
 }

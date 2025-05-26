@@ -48,7 +48,7 @@ struct BillDetailView: View {
                 Text("Details")
             }
             
-            Section {
+            Section(header: Text("Payment Status")) {
                 Button(action: {
                     bill.isPaid.toggle()
                     try? modelContext.save()
@@ -60,8 +60,6 @@ struct BillDetailView: View {
                             .foregroundColor(bill.isPaid ? .green : .primary)
                     }
                 }
-            } header: {
-                Text("Payment Status")
             }
         }
         .navigationTitle(bill.name ?? "Bill Details")
@@ -142,11 +140,11 @@ struct BudgetsView: View {
                 let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: nextDueDate))!
                 let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
                 
-                let existingBill = bills.first { existingBill in
+                let existingBill = bills.first(where: { existingBill in
                     existingBill.name == bill.name &&
                     existingBill.firstInstallment >= startOfMonth &&
                     existingBill.firstInstallment < endOfMonth
-                }
+                })
                 
                 if existingBill == nil {
                     // Create new bill instance
@@ -192,7 +190,7 @@ struct BudgetsView: View {
         
         return transactions
             .filter { $0.category == category && $0.date >= startOfMonth && $0.date < endOfMonth }
-            .reduce(0) { $0 + $1.amount }
+            .reduce(0) { $0 + abs($1.amount) }
     }
     
     private var filteredTransactionBudgets: [TransactionBudget] {
@@ -206,7 +204,7 @@ struct BudgetsView: View {
             .compactMap { $0.category })
         
         return transactionBudgets.filter { budget in
-            // Keep all budgets that have a limit set
+            // Always show budgets that have a limit set
             if let limit = budget.limit, limit > 0 {
                 return true
             }
@@ -248,44 +246,27 @@ struct BudgetsView: View {
                 List {
                     ForEach(Array(billsByCategory.keys.sorted()), id: \.self) { category in
                         let bills = billsByCategory[category] ?? []
-                        Section {
-                            ForEach(bills) { bill in
-                                NavigationLink(destination: BillDetailView(bill: bill)) {
-                                    HStack {
-                                        VStack(alignment: .leading) {
-                                            Text(bill.name ?? "Unnamed Bill")
-                                                .font(.headline)
-                                            Text(FormattingUtils.formatCurrency(bill.amount ?? 0))
-                                                .font(.subheadline)
-                                                .foregroundColor(.secondary)
-                                        }
-                                        
-                                        Spacer()
-                                        
-                                        VStack(alignment: .trailing) {
-                                            Text(bill.firstInstallment.formatted(date: .abbreviated, time: .omitted))
-                                                .font(.caption)
-                                                .foregroundColor(.secondary)
-                                            
-                                            if let budget = billBudgets.first(where: { $0.category == category }) {
-                                                Toggle("Paid", isOn: Binding(
-                                                    get: { budget.isPaid },
-                                                    set: { newValue in
-                                                        budget.isPaid = newValue
-                                                        try? modelContext.save()
-                                                    }
-                                                ))
-                                                .labelsHidden()
-                                            }
-                                        }
-                                    }
-                                    .opacity(bill.isPaid ? 0.6 : 1.0)
+                        let total = bills.reduce(0) { $0 + ($1.amount ?? 0) }
+                        
+                        NavigationLink(destination: CategoryBillsView(category: category)) {
+                            HStack {
+                                Circle()
+                                    .fill(BillCategory(rawValue: category)?.color ?? .gray)
+                                    .frame(width: 12, height: 12)
+                                VStack(alignment: .leading) {
+                                    Text(category)
+                                        .font(.headline)
+                                    Text("\(bills.count) bills")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
                                 }
+                                Spacer()
+                                Text(FormattingUtils.formatCurrency(total))
+                                    .font(.headline)
                             }
-                        } header: {
-                            Text(category)
                         }
                     }
+                    
                     // Transaction Budgets Section
                     if !filteredTransactionBudgets.isEmpty {
                         Section(header: Text("Category Budgets")) {

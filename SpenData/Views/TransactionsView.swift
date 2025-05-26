@@ -44,59 +44,17 @@ enum TimePeriod: String, CaseIterable {
     }
 }
 
-struct TransactionChartView: View {
-    let transactions: [Transaction]
-    let timePeriod: TimePeriod
-    
-    private var dailyAmounts: [(date: Date, amount: Double)] {
-        let calendar = Calendar.current
-        let (startDate, endDate) = timePeriod.dateRange(from: Date())
-        
-        let filteredTransactions = transactions.filter { transaction in
-            transaction.date >= startDate && transaction.date < endDate
-        }
-        
-        let grouped = Dictionary(grouping: filteredTransactions) { transaction in
-            calendar.startOfDay(for: transaction.date)
-        }
-        
-        return grouped.map { (date, transactions) in
-            let total = transactions.reduce(0) { $0 + $1.amount }
-            return (date: date, amount: total)
-        }.sorted { $0.date < $1.date }
-    }
-    
-    var body: some View {
-        Chart(dailyAmounts, id: \.date) { item in
-            BarMark(
-                x: .value("Date", item.date),
-                y: .value("Amount", abs(item.amount))
-            )
-            .foregroundStyle(.red)
-        }
-        .chartXAxis {
-            AxisMarks(values: .stride(by: .day)) { value in
-                AxisGridLine()
-                AxisValueLabel(format: .dateTime.day())
-            }
-        }
-        .chartYAxis {
-            AxisMarks { value in
-                AxisGridLine()
-                AxisValueLabel(format: .currency(code: Locale.current.currency?.identifier ?? "USD"))
-            }
-        }
-        .frame(height: 200)
-        .padding()
-    }
-}
-
 struct TransactionsView: View {
     @Environment(\.modelContext) private var modelContext
     @Query private var transactions: [Transaction]
     @State private var selectedTimePeriod: TimePeriod = .month
     @State private var viewMode: ViewMode = .daily
     @State private var showingAddTransaction = false
+    @State private var selectedMonth = Date()
+    
+    private var monthString: String {
+        selectedMonth.formatted(.dateTime.month().year())
+    }
     
     enum ViewMode: String, CaseIterable {
         case daily = "Daily"
@@ -105,14 +63,29 @@ struct TransactionsView: View {
     
     private var groupedTransactions: [(Date, [Transaction])] {
         let calendar = Calendar.current
-        let grouped = Dictionary(grouping: transactions) { transaction in
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedMonth))!
+        let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
+        
+        let filteredTransactions = transactions.filter { transaction in
+            transaction.date >= startOfMonth && transaction.date < endOfMonth
+        }
+        
+        let grouped = Dictionary(grouping: filteredTransactions) { transaction in
             calendar.startOfDay(for: transaction.date)
         }
         return grouped.sorted { $0.key > $1.key }
     }
     
     private var categorySummaries: [(category: String, amount: Double, count: Int)] {
-        let grouped = Dictionary(grouping: transactions) { $0.category ?? TransactionCategory.uncategorized.rawValue }
+        let calendar = Calendar.current
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedMonth))!
+        let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
+        
+        let filteredTransactions = transactions.filter { transaction in
+            transaction.date >= startOfMonth && transaction.date < endOfMonth
+        }
+        
+        let grouped = Dictionary(grouping: filteredTransactions) { $0.category ?? TransactionCategory.uncategorized.rawValue }
         return grouped.map { (category, transactions) in
             let totalAmount = transactions.reduce(0) { $0 + abs($1.amount) }
             return (category: category, amount: totalAmount, count: transactions.count)
@@ -120,7 +93,15 @@ struct TransactionsView: View {
     }
     
     private var categoryTotals: [(category: String, amount: Double)] {
-        let grouped = Dictionary(grouping: transactions) { $0.category ?? TransactionCategory.uncategorized.rawValue }
+        let calendar = Calendar.current
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedMonth))!
+        let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
+        
+        let filteredTransactions = transactions.filter { transaction in
+            transaction.date >= startOfMonth && transaction.date < endOfMonth
+        }
+        
+        let grouped = Dictionary(grouping: filteredTransactions) { $0.category ?? TransactionCategory.uncategorized.rawValue }
         return grouped.map { (category, transactions) in
             let total = transactions.reduce(0) { $0 + abs($1.amount) }
             return (category: category, amount: total)
@@ -129,69 +110,67 @@ struct TransactionsView: View {
     
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Picker("Time Period", selection: $selectedTimePeriod) {
-                            ForEach(TimePeriod.allCases, id: \.self) { period in
-                                Text(period.rawValue).tag(period)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .padding(.horizontal)
-                        
-                        if viewMode == .daily {
-                            TransactionChartView(transactions: transactions, timePeriod: selectedTimePeriod)
-                        } else {
-                            TransactionCategoryChartView(categoryTotals: categoryTotals)
-                        }
+            VStack {
+                // Month selector
+                HStack {
+                    Button(action: { selectedMonth = Calendar.current.date(byAdding: .month, value: -1, to: selectedMonth)! }) {
+                        Image(systemName: "chevron.left")
+                    }
+                    
+                    Text(monthString)
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                    
+                    Button(action: { selectedMonth = Calendar.current.date(byAdding: .month, value: 1, to: selectedMonth)! }) {
+                        Image(systemName: "chevron.right")
                     }
                 }
+                .padding(.horizontal)
                 
-                Section {
-                    Picker("View Mode", selection: $viewMode) {
-                        ForEach(ViewMode.allCases, id: \.self) { mode in
-                            Text(mode.rawValue).tag(mode)
-                        }
+                Picker("View Mode", selection: $viewMode) {
+                    ForEach(ViewMode.allCases, id: \.self) { mode in
+                        Text(mode.rawValue).tag(mode)
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
                 
-                if viewMode == .category {
-                    Section("Categories") {
-                        ForEach(categorySummaries, id: \.category) { summary in
-                            NavigationLink(destination: TransactionCategoryDetailView(category: summary.category)) {
-                                HStack {
-                                    Circle()
-                                        .fill(TransactionCategory(rawValue: summary.category)?.color ?? .gray)
-                                        .frame(width: 12, height: 12)
-                                    VStack(alignment: .leading) {
-                                        Text(summary.category)
+                List {
+                    if viewMode == .category {
+                        Section("Categories") {
+                            ForEach(categorySummaries, id: \.category) { summary in
+                                NavigationLink(destination: TransactionCategoryDetailView(category: summary.category)) {
+                                    HStack {
+                                        Circle()
+                                            .fill(TransactionCategory(rawValue: summary.category)?.color ?? .gray)
+                                            .frame(width: 12, height: 12)
+                                        VStack(alignment: .leading) {
+                                            Text(summary.category)
+                                                .font(.headline)
+                                            Text("\(summary.count) transactions")
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Spacer()
+                                        Text(FormattingUtils.formatCurrency(summary.amount))
                                             .font(.headline)
-                                        Text("\(summary.count) transactions")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
                                     }
-                                    Spacer()
-                                    Text(FormattingUtils.formatCurrency(summary.amount))
-                                        .font(.headline)
                                 }
                             }
                         }
                     }
-                }
-                
-                if viewMode == .daily {
-                    ForEach(groupedTransactions, id: \.0) { date, transactions in
-                        Section(header: Text(date.formatted(date: .complete, time: .omitted))) {
-                            ForEach(transactions) { transaction in
-                                NavigationLink(destination: TransactionDetailView(transaction: transaction)) {
-                                    TransactionListItem(transaction: transaction)
+                    
+                    if viewMode == .daily {
+                        ForEach(groupedTransactions, id: \.0) { date, transactions in
+                            Section(header: Text(date.formatted(date: .complete, time: .omitted))) {
+                                ForEach(transactions) { transaction in
+                                    NavigationLink(destination: TransactionDetailView(transaction: transaction)) {
+                                        TransactionListItem(transaction: transaction)
+                                    }
                                 }
-                            }
-                            .onDelete { indexSet in
-                                deleteTransactions(at: indexSet, in: transactions)
+                                .onDelete { indexSet in
+                                    deleteTransactions(at: indexSet, in: transactions)
+                                }
                             }
                         }
                     }
