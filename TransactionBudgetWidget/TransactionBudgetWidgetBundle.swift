@@ -11,8 +11,9 @@ import SwiftUI
 @main
 struct TransactionBudgetWidgetBundle: WidgetBundle {
     var body: some Widget {
-        TransactionBudgetWidget()
-        TransactionBudgetWidgetControl()
-        TransactionBudgetWidgetLiveActivity()
+        SingleBudgetWidget()
+        TwoBudgetsWidget()
+        FourBudgetsWidget()
+        MediumBudgetBarWidget()
     }
 }
