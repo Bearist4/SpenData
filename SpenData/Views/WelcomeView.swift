@@ -8,6 +8,7 @@ struct WelcomeView: View {
     @State private var isAuthenticated = false
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @StateObject private var syncService = SyncService.shared
     
     var body: some View {
         Group {
@@ -52,6 +53,14 @@ struct WelcomeView: View {
             
             // Save changes
             try modelContext.save()
+            
+            // Initialize sync
+            await syncService.initializeSync()
+            
+            // Wait for sync to complete
+            while !syncService.isInitialized {
+                try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+            }
             
             isAuthenticated = true
         } catch {
@@ -132,6 +141,14 @@ struct WelcomeView: View {
                     
                     // Save user data securely
                     try await user.saveSecureData()
+                    
+                    // Initialize sync
+                    await syncService.initializeSync()
+                    
+                    // Wait for sync to complete
+                    while !syncService.isInitialized {
+                        try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+                    }
                     
                     isAuthenticated = true
                 } catch {

@@ -9,7 +9,9 @@ struct PreviewData {
             Transaction.self,
             Bill.self,
             BillBudget.self,
-            TransactionBudget.self
+            TransactionBudget.self,
+            Income.self,
+            FinancialGoal.self
         ])
         
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
@@ -38,6 +40,12 @@ struct PreviewData {
         
         // Create sample budgets
         createSampleBudgets(for: user)
+        
+        // Create sample incomes
+        createSampleIncomes(for: user)
+        
+        // Create sample financial goals
+        createSampleFinancialGoals(for: user)
     }
     
     private static func createSampleTransactions(for user: User) {
@@ -203,6 +211,102 @@ struct PreviewData {
         for budget in transactionBudgets {
             budget.user = user
             user.transactionBudgets?.append(budget)
+        }
+    }
+    
+    private static func createSampleIncomes(for user: User) {
+        let incomes = [
+            Income(
+                name: "Primary Job",
+                amount: 5000.00,
+                category: IncomeCategory.salary.rawValue,
+                issuer: "Tech Corp",
+                firstPayment: Date().addingTimeInterval(86400 * 5),
+                frequency: IncomeFrequency.monthly.rawValue,
+                notes: "Monthly salary from primary job"
+            ),
+            Income(
+                name: "Freelance Projects",
+                amount: 1500.00,
+                category: IncomeCategory.freelance.rawValue,
+                issuer: "Various Clients",
+                firstPayment: Date().addingTimeInterval(86400 * 3),
+                frequency: IncomeFrequency.monthly.rawValue,
+                notes: "Monthly freelance income"
+            ),
+            Income(
+                name: "Stock Dividends",
+                amount: 200.00,
+                category: IncomeCategory.investments.rawValue,
+                issuer: "Investment Portfolio",
+                firstPayment: Date().addingTimeInterval(86400 * 7),
+                frequency: IncomeFrequency.quarterly.rawValue,
+                notes: "Quarterly dividend payments"
+            ),
+            Income(
+                name: "Rental Property",
+                amount: 1200.00,
+                category: IncomeCategory.rental.rawValue,
+                issuer: "Tenant",
+                firstPayment: Date().addingTimeInterval(86400 * 2),
+                frequency: IncomeFrequency.monthly.rawValue,
+                notes: "Monthly rental income"
+            ),
+            Income(
+                name: "Side Business",
+                amount: 800.00,
+                category: IncomeCategory.business.rawValue,
+                issuer: "Online Store",
+                firstPayment: Date().addingTimeInterval(86400 * 4),
+                frequency: IncomeFrequency.monthly.rawValue,
+                notes: "Monthly income from online store"
+            )
+        ]
+        
+        for income in incomes {
+            income.user = user
+            user.incomes?.append(income)
+        }
+    }
+    
+    private static func createSampleFinancialGoals(for user: User) {
+        let goals = [
+            FinancialGoal(
+                name: "Emergency Fund",
+                method: .fiftyThirtyTwenty,
+                targetAmount: 10000,
+                startDate: Date(),
+                targetDate: Date().addingTimeInterval(180 * 24 * 60 * 60),
+                customPercentages: nil
+            ),
+            FinancialGoal(
+                name: "Vacation Savings",
+                method: .seventyTwentyTen,
+                targetAmount: 5000,
+                startDate: Date(),
+                targetDate: Date().addingTimeInterval(90 * 24 * 60 * 60),
+                customPercentages: nil
+            ),
+            FinancialGoal(
+                name: "New Car Fund",
+                method: .zeroBased,
+                targetAmount: 25000,
+                startDate: Date(),
+                targetDate: Date().addingTimeInterval(365 * 24 * 60 * 60),
+                customPercentages: [
+                    "Needs": 0.5,
+                    "Wants": 0.2,
+                    "Savings": 0.3
+                ]
+            )
+        ]
+        
+        for goal in goals {
+            goal.user = user
+            if user.financialGoals == nil {
+                user.financialGoals = []
+            }
+            user.financialGoals?.append(goal)
         }
     }
 } 

@@ -17,6 +17,8 @@ final class User {
     @Relationship(deleteRule: .cascade) var transactions: [Transaction]?
     @Relationship(deleteRule: .cascade) var billBudgets: [BillBudget]?
     @Relationship(deleteRule: .cascade) var transactionBudgets: [TransactionBudget]?
+    @Relationship(deleteRule: .cascade) var incomes: [Income]?
+    @Relationship(deleteRule: .cascade) var financialGoals: [FinancialGoal]?
     
     init(id: String = UUID().uuidString,
          email: String,
@@ -28,69 +30,115 @@ final class User {
         self.transactions = []
         self.billBudgets = []
         self.transactionBudgets = []
+        self.incomes = []
+        self.financialGoals = []
     }
     
     // MARK: - Secure Storage Methods
     
+    private func createCloudKitKey() -> String {
+        let sanitizedId = (id ?? UUID().uuidString).replacingOccurrences(of: "-", with: "")
+        return "user_\(sanitizedId)"
+    }
+    
     func saveSecureData() async throws {
         let secureStorage = SecureStorageService.shared
         
-        // Create a dictionary with the correct types
         let userDataDict: [String: String] = [
             "id": id ?? "",
             "email": email ?? "",
             "name": name ?? "",
-            "deviceIdentifier": deviceIdentifier,
-            "lastLoginDate": String(lastLoginDate.timeIntervalSince1970)
+            "createdAt": String(createdAt.timeIntervalSince1970),
+            "lastLoginDate": String(lastLoginDate.timeIntervalSince1970),
+            "deviceIdentifier": deviceIdentifier
         ]
         
-        // Save user data to Keychain
+        let cloudKitKey = createCloudKitKey()
+        
         let userData = try JSONEncoder().encode(userDataDict)
-        try secureStorage.saveToKeychain(key: "userData", data: userData)
+        try secureStorage.saveToKeychain(key: cloudKitKey, data: userData)
+        try await secureStorage.saveToiCloud(key: cloudKitKey, data: userData)
         
-        // Save user data to iCloud
-        try await secureStorage.saveToiCloud(key: "userData", data: userData)
+        // Save related data
+        if let bills = bills {
+            for bill in bills {
+                try await bill.saveSecureData()
+            }
+        }
         
-        // Set up iCloud sync
-        try await secureStorage.syncWithiCloud()
+        if let transactions = transactions {
+            for transaction in transactions {
+                try await transaction.saveSecureData()
+            }
+        }
+        
+        if let billBudgets = billBudgets {
+            for budget in billBudgets {
+                try await budget.saveSecureData()
+            }
+        }
+        
+        if let transactionBudgets = transactionBudgets {
+            for budget in transactionBudgets {
+                try await budget.saveSecureData()
+            }
+        }
+        
+        if let incomes = incomes {
+            for income in incomes {
+                try await income.saveSecureData()
+            }
+        }
+        
+        if let financialGoals = financialGoals {
+            for goal in financialGoals {
+                try await goal.saveSecureData()
+            }
+        }
     }
     
     func loadSecureData() async throws {
         let secureStorage = SecureStorageService.shared
+        let cloudKitKey = createCloudKitKey()
         
-        // Try to load from Keychain first
-        do {
-            let userData = try secureStorage.loadFromKeychain(key: "userData")
-            let userDict = try JSONDecoder().decode([String: String].self, from: userData)
+        // Try to load from iCloud first
+        if let data = try? await secureStorage.loadFromiCloud(key: cloudKitKey) {
+            let userDataDict = try JSONDecoder().decode([String: String].self, from: data)
             
-            // Update user properties
-            self.id = userDict["id"]
-            self.email = userDict["email"]
-            self.name = userDict["name"]
-            if let deviceId = userDict["deviceIdentifier"] { self.deviceIdentifier = deviceId }
-            if let timestamp = userDict["lastLoginDate"],
-               let timeInterval = Double(timestamp) {
-                self.lastLoginDate = Date(timeIntervalSince1970: timeInterval)
+            id = userDataDict["id"]
+            email = userDataDict["email"]
+            name = userDataDict["name"]
+            
+            if let createdAtString = userDataDict["createdAt"],
+               let createdAtTimeInterval = Double(createdAtString) {
+                createdAt = Date(timeIntervalSince1970: createdAtTimeInterval)
             }
-        } catch {
-            // If Keychain fails, try iCloud
-            do {
-                let userData = try await secureStorage.loadFromiCloud(key: "userData")
-                let userDict = try JSONDecoder().decode([String: String].self, from: userData)
-                
-                // Update user properties
-                self.id = userDict["id"]
-                self.email = userDict["email"]
-                self.name = userDict["name"]
-                if let deviceId = userDict["deviceIdentifier"] { self.deviceIdentifier = deviceId }
-                if let timestamp = userDict["lastLoginDate"],
-                   let timeInterval = Double(timestamp) {
-                    self.lastLoginDate = Date(timeIntervalSince1970: timeInterval)
-                }
-            } catch {
-                // If both fail, keep the current data
-                print("Failed to load secure data: \(error)")
+            
+            if let lastLoginString = userDataDict["lastLoginDate"],
+               let lastLoginTimeInterval = Double(lastLoginString) {
+                lastLoginDate = Date(timeIntervalSince1970: lastLoginTimeInterval)
             }
+            
+            deviceIdentifier = userDataDict["deviceIdentifier"] ?? deviceIdentifier
+        } else if let data = try? secureStorage.loadFromKeychain(key: cloudKitKey) {
+            // Fall back to Keychain if iCloud fails
+            let userDataDict = try JSONDecoder().decode([String: String].self, from: data)
+            
+            id = userDataDict["id"]
+            email = userDataDict["email"]
+            name = userDataDict["name"]
+            
+            if let createdAtString = userDataDict["createdAt"],
+               let createdAtTimeInterval = Double(createdAtString) {
+                createdAt = Date(timeIntervalSince1970: createdAtTimeInterval)
+            }
+            
+            if let lastLoginString = userDataDict["lastLoginDate"],
+               let lastLoginTimeInterval = Double(lastLoginString) {
+                lastLoginDate = Date(timeIntervalSince1970: lastLoginTimeInterval)
+            }
+            
+            deviceIdentifier = userDataDict["deviceIdentifier"] ?? deviceIdentifier
         }
     }
     
@@ -98,8 +146,8 @@ final class User {
         let secureStorage = SecureStorageService.shared
         
         // Delete from both Keychain and iCloud
-        try secureStorage.deleteFromKeychain(key: "userData")
-        try await secureStorage.deleteFromiCloud(key: "userData")
+        try secureStorage.deleteFromKeychain(key: createCloudKitKey())
+        try await secureStorage.deleteFromiCloud(key: createCloudKitKey())
     }
     
     // MARK: - Device Synchronization
@@ -110,8 +158,5 @@ final class User {
     
     func updateLastLoginDate() {
         lastLoginDate = Date()
-        Task {
-            try? await saveSecureData()
-        }
     }
 } 

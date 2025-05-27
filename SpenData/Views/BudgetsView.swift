@@ -315,7 +315,7 @@ struct BudgetsView: View {
                     }
                 }
             }
-            .navigationTitle("Bills")
+            .navigationTitle("Budgets")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {

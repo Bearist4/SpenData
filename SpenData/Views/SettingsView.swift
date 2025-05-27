@@ -45,6 +45,18 @@ struct SettingsView: View {
                     NavigationLink(destination: TransactionBudgetsListView()) {
                         Label("Transaction Budgets", systemImage: "dollarsign.circle")
                     }
+                    
+                    NavigationLink(destination: IncomeSourcesListView()) {
+                        Label("Income Sources", systemImage: "dollarsign.square")
+                    }
+                    
+                    NavigationLink(destination: FinancialGoalsView()) {
+                        Label("Financial Goals", systemImage: "target")
+                    }
+                    
+                    NavigationLink(destination: CategoriesView()) {
+                        Label("Categories", systemImage: "tag")
+                    }
                 }
                 
                 Section {
@@ -373,6 +385,123 @@ struct EditTransactionBudgetView: View {
             
             try? modelContext.save()
             dismiss()
+        }
+    }
+}
+
+struct IncomeSourcesListView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query private var incomes: [Income]
+    @State private var showingAddIncome = false
+    
+    private var incomesByCategory: [String: [Income]] {
+        Dictionary(grouping: incomes) { $0.category ?? "Uncategorized" }
+    }
+    
+    var body: some View {
+        List {
+            ForEach(Array(incomesByCategory.keys.sorted()), id: \.self) { category in
+                NavigationLink(destination: CategoryIncomesView(category: category)) {
+                    HStack {
+                        Circle()
+                            .fill(IncomeCategory(rawValue: category)?.color ?? .gray)
+                            .frame(width: 12, height: 12)
+                        VStack(alignment: .leading) {
+                            Text(category)
+                                .font(.headline)
+                            Text("\(incomesByCategory[category]?.count ?? 0) sources")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if let total = incomesByCategory[category]?.reduce(0, { $0 + $1.amount }) {
+                            Text(FormattingUtils.formatCurrency(total))
+                                .font(.headline)
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Income Sources")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showingAddIncome = true
+                } label: {
+                    Image(systemName: "plus")
+                }
+            }
+        }
+        .sheet(isPresented: $showingAddIncome) {
+            AddIncomeView()
+        }
+    }
+}
+
+struct CategoryIncomesView: View {
+    let category: String
+    @Query private var incomes: [Income]
+    @Environment(\.modelContext) private var modelContext
+    
+    init(category: String) {
+        self.category = category
+        let predicate = #Predicate<Income> { income in
+            income.category == category
+        }
+        _incomes = Query(filter: predicate)
+    }
+    
+    var body: some View {
+        List {
+            ForEach(incomes) { income in
+                NavigationLink(destination: IncomeDetailView(income: income)) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(income.name ?? "Unnamed Income")
+                                .font(.headline)
+                            Spacer()
+                            Text(FormattingUtils.formatCurrency(income.amount))
+                                .font(.headline)
+                        }
+                        
+                        HStack {
+                            Text(income.issuer ?? "Unknown Issuer")
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("Next payment: \(income.firstPayment, style: .date)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        
+                        if let frequency = income.frequency {
+                            Text("Frequency: \(frequency)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .onDelete(perform: deleteIncomes)
+        }
+        .navigationTitle(category)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                EditButton()
+            }
+        }
+    }
+    
+    private func deleteIncomes(at offsets: IndexSet) {
+        for index in offsets {
+            let income = incomes[index]
+            modelContext.delete(income)
+        }
+        
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error deleting incomes: \(error)")
         }
     }
 }

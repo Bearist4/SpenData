@@ -12,6 +12,7 @@ import AppIntents
 
 extension Notification.Name {
     static let transactionDataDidChange = Notification.Name("transactionDataDidChange")
+    static let financialGoalDataDidChange = Notification.Name("financialGoalDataDidChange")
 }
 
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -46,12 +47,25 @@ struct SpenDataApp: App {
                 Transaction.self,
                 Bill.self,
                 BillBudget.self,
-                TransactionBudget.self
+                TransactionBudget.self,
+                Income.self,
+                FinancialGoal.self,
+                MonthlySpending.self
             ])
             
-            let modelConfiguration = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
+            // Configure CloudKit sync
+            let modelConfiguration = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: false,
+                allowsSave: true,
+                cloudKitDatabase: .automatic
+            )
             
-            modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            // Create a single container instance
+            modelContainer = try ModelContainer(
+                for: schema,
+                configurations: [modelConfiguration]
+            )
             
             print("Successfully initialized ModelContainer")
             
@@ -62,7 +76,8 @@ struct SpenDataApp: App {
             do {
                 let inMemoryConfig = ModelConfiguration(isStoredInMemoryOnly: true)
                 modelContainer = try ModelContainer(
-                    for: User.self, Bill.self, Transaction.self, BillBudget.self, TransactionBudget.self,
+                    for: User.self, Bill.self, Transaction.self, BillBudget.self, 
+                    TransactionBudget.self, Income.self, FinancialGoal.self, MonthlySpending.self,
                     configurations: inMemoryConfig
                 )
                 print("Successfully initialized in-memory ModelContainer")
@@ -76,6 +91,7 @@ struct SpenDataApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .modelContainer(modelContainer) // Use the single container instance
                 .onReceive(NotificationCenter.default.publisher(for: .transactionDataDidChange)) { _ in
                     // Refresh the view when transaction data changes
                     try? modelContainer.mainContext.save()
@@ -89,7 +105,6 @@ struct SpenDataApp: App {
                     await syncService.syncData()
                 }
         }
-        .modelContainer(modelContainer)
     }
 }
 
