@@ -14,11 +14,24 @@ class SyncService: ObservableObject {
     @Published var syncState: SyncState = .idle
     @Published var isInitialized = false
     
-    enum SyncState {
+    enum SyncState: Equatable {
         case idle
         case syncing
         case resetting
         case error(String)
+        
+        static func == (lhs: SyncState, rhs: SyncState) -> Bool {
+            switch (lhs, rhs) {
+            case (.idle, .idle),
+                 (.syncing, .syncing),
+                 (.resetting, .resetting):
+                return true
+            case (.error(let lhsError), .error(let rhsError)):
+                return lhsError == rhsError
+            default:
+                return false
+            }
+        }
     }
     
     private init() {
@@ -251,18 +264,15 @@ class SyncService: ObservableObject {
             return
         }
         
+        await MainActor.run {
+            syncState = .syncing
+        }
+        
         do {
-            logger.info("Starting sync")
-            await MainActor.run {
-                syncState = .syncing
-            }
-            
             // Force a sync by triggering a CloudKit fetch
             try await container.accountStatus()
             
-            // Notify that data has changed on main thread
             await MainActor.run {
-                NotificationCenter.default.post(name: .billDataDidChange, object: nil)
                 syncState = .idle
             }
             
@@ -285,7 +295,6 @@ class SyncService: ObservableObject {
                     await recreateZone()
                 case .networkFailure, .networkUnavailable:
                     logger.error("Network issue detected")
-                    // You might want to implement a retry mechanism here
                 default:
                     logger.error("Unhandled CloudKit error: \(cloudKitError.localizedDescription)")
                 }
@@ -298,7 +307,6 @@ class SyncService: ObservableObject {
         do {
             try await container.accountStatus()
             await MainActor.run {
-                NotificationCenter.default.post(name: .billDataDidChange, object: nil)
                 syncState = .idle
             }
             logger.info("Conflict resolved successfully")
@@ -315,7 +323,6 @@ class SyncService: ObservableObject {
         do {
             try await container.accountStatus()
             await MainActor.run {
-                NotificationCenter.default.post(name: .billDataDidChange, object: nil)
                 syncState = .idle
             }
             logger.info("Zone recreated successfully")
