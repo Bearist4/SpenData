@@ -19,7 +19,11 @@ struct BudgetProgressView: View {
 
 struct BillDetailView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
     let bill: Bill
+    
+    @State private var showingEditSheet = false
+    @State private var showingPaidBills = false
     
     private struct DetailItem: Identifiable {
         let id = UUID()
@@ -34,35 +38,213 @@ struct BillDetailView: View {
             DetailItem(label: "Category", value: bill.category ?? "Uncategorized"),
             DetailItem(label: "Issuer", value: bill.issuer ?? "Unknown"),
             DetailItem(label: "Due Date", value: bill.firstInstallment.formatted(date: .long, time: .omitted)),
-            DetailItem(label: "Recurrence", value: bill.recurrence ?? "One-time")
+            DetailItem(label: "Recurrence", value: bill.recurrence ?? "One-time"),
+            DetailItem(label: "Shared", value: bill.isShared ? "Yes (\(bill.numberOfShares) people)" : "No")
         ]
+    }
+    
+    private func generateUpcomingOccurrences() -> [Date] {
+        guard let recurrence = bill.recurrence,
+              let recurrenceEnum = BillRecurrence(rawValue: recurrence) else {
+            return [bill.firstInstallment]
+        }
+        
+        var occurrences: [Date] = []
+        var currentDate = bill.firstInstallment
+        let calendar = Calendar.current
+        let endDate = calendar.date(byAdding: .year, value: 1, to: Date()) ?? Date()
+        
+        while currentDate <= endDate {
+            occurrences.append(currentDate)
+            currentDate = recurrenceEnum.nextDueDate(from: currentDate)
+        }
+        
+        return occurrences
     }
     
     var body: some View {
         List {
-            Section {
-                ForEach(details) { item in
-                    LabeledContent(item.label, value: item.value)
+            Section("Details") {
+                ForEach(details) { detail in
+                    HStack {
+                        Text(detail.label)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text(detail.value)
+                    }
                 }
-            } header: {
-                Text("Details")
             }
             
-            Section(header: Text("Payment Status")) {
-                Button(action: {
-                    bill.isPaid.toggle()
-                    try? modelContext.save()
-                }) {
+            Section("Upcoming Occurrences") {
+                ForEach(generateUpcomingOccurrences(), id: \.self) { date in
                     HStack {
-                        Image(systemName: bill.isPaid ? "checkmark.circle.fill" : "circle")
-                            .foregroundColor(bill.isPaid ? .green : .gray)
-                        Text(bill.isPaid ? "Mark as Unpaid" : "Mark as Paid")
-                            .foregroundColor(bill.isPaid ? .green : .primary)
+                        Text(date.formatted(date: .long, time: .omitted))
+                        Spacer()
+                        Text(FormattingUtils.formatCurrency(bill.amount / Double(bill.isShared ? bill.numberOfShares : 1)))
+                            .foregroundStyle(.secondary)
                     }
+                }
+            }
+            
+            Section {
+                Button("View Paid Bills") {
+                    showingPaidBills = true
                 }
             }
         }
         .navigationTitle(bill.name ?? "Bill Details")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Edit") {
+                    showingEditSheet = true
+                }
+            }
+        }
+        .sheet(isPresented: $showingEditSheet) {
+            EditBillView(bill: bill)
+        }
+        .sheet(isPresented: $showingPaidBills) {
+            PaidBillsView(bill: bill)
+        }
+    }
+}
+
+struct EditBillView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    
+    let bill: Bill
+    
+    @State private var name: String
+    @State private var amount: String
+    @State private var category: BillCategory
+    @State private var issuer: String
+    @State private var firstInstallment: Date
+    @State private var recurrence: BillRecurrence
+    @State private var isShared: Bool
+    @State private var numberOfShares: Int
+    
+    init(bill: Bill) {
+        self.bill = bill
+        _name = State(initialValue: bill.name ?? "")
+        _amount = State(initialValue: String(bill.amount))
+        _category = State(initialValue: BillCategory(rawValue: bill.category ?? "") ?? .uncategorized)
+        _issuer = State(initialValue: bill.issuer ?? "")
+        _firstInstallment = State(initialValue: bill.firstInstallment)
+        _recurrence = State(initialValue: BillRecurrence(rawValue: bill.recurrence ?? "") ?? .monthly)
+        _isShared = State(initialValue: bill.isShared)
+        _numberOfShares = State(initialValue: bill.numberOfShares)
+    }
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Bill Details") {
+                    TextField("Name", text: $name)
+                    TextField("Amount", text: $amount)
+                        .keyboardType(.decimalPad)
+                    Picker("Category", selection: $category) {
+                        ForEach(BillCategory.allCases, id: \.self) { category in
+                            Text(category.rawValue).tag(category)
+                        }
+                    }
+                    TextField("Issuer", text: $issuer)
+                    DatePicker("First Installment", selection: $firstInstallment, displayedComponents: .date)
+                    Picker("Recurrence", selection: $recurrence) {
+                        ForEach(BillRecurrence.allCases, id: \.self) { recurrence in
+                            Text(recurrence.rawValue).tag(recurrence)
+                        }
+                    }
+                }
+                
+                Section {
+                    Toggle("Shared Bill", isOn: $isShared)
+                    if isShared {
+                        Stepper("Number of Shares: \(numberOfShares)", value: $numberOfShares, in: 2...10)
+                    }
+                }
+            }
+            .navigationTitle("Edit Bill")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        saveBill()
+                    }
+                }
+            }
+        }
+    }
+    
+    private func saveBill() {
+        if let amountValue = Double(amount) {
+            bill.name = name
+            bill.amount = amountValue
+            bill.category = category.rawValue
+            bill.issuer = issuer
+            bill.firstInstallment = firstInstallment
+            bill.recurrence = recurrence.rawValue
+            bill.isShared = isShared
+            bill.numberOfShares = numberOfShares
+            
+            try? modelContext.save()
+            dismiss()
+        }
+    }
+}
+
+struct PaidBillsView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    
+    let bill: Bill
+    @Query private var paidBills: [Bill]
+    
+    init(bill: Bill) {
+        self.bill = bill
+        let predicate = #Predicate<Bill> { paidBill in
+            paidBill.isPaid == true
+        }
+        _paidBills = Query(filter: predicate)
+    }
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(paidBills.filter { $0.name == bill.name && $0.issuer == bill.issuer }) { paidBill in
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(paidBill.firstInstallment.formatted(date: .long, time: .omitted))
+                                .font(.headline)
+                            Spacer()
+                            Text(FormattingUtils.formatCurrency(paidBill.amount / Double(paidBill.isShared ? paidBill.numberOfShares : 1)))
+                                .font(.headline)
+                        }
+                        
+                        if paidBill.isShared {
+                            Text("Shared: \(paidBill.numberOfShares) people")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .navigationTitle("Paid Bills")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -176,9 +358,27 @@ struct BudgetsView: View {
         let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: selectedMonth))!
         let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
         
-        return Dictionary(grouping: bills.filter { bill in
-            bill.firstInstallment >= startOfMonth && bill.firstInstallment < endOfMonth
-        }) { $0.category ?? "Uncategorized" }
+        // Create a dictionary to track unique bills by their name, issuer, and category
+        var uniqueBills: [String: Bill] = [:]
+        
+        // Filter bills for the current month and deduplicate
+        for bill in bills where bill.firstInstallment >= startOfMonth && bill.firstInstallment < endOfMonth {
+            let key = "\(bill.name ?? "")-\(bill.issuer ?? "")-\(bill.category ?? "")"
+            if uniqueBills[key] == nil {
+                uniqueBills[key] = bill
+            }
+        }
+        
+        // Group the unique bills by category
+        return Dictionary(grouping: Array(uniqueBills.values)) { $0.category ?? "Uncategorized" }
+    }
+    
+    private func calculateTotalForBills(_ bills: [Bill]) -> Double {
+        bills.reduce(0) { total, bill in
+            let billAmount = bill.amount ?? 0
+            let userShare = bill.isShared ? billAmount / Double(bill.numberOfShares) : billAmount
+            return total + userShare
+        }
     }
     
     private func calculateSpentAmount(for budget: TransactionBudget) -> Double {
@@ -246,7 +446,7 @@ struct BudgetsView: View {
                 List {
                     ForEach(Array(billsByCategory.keys.sorted()), id: \.self) { category in
                         let bills = billsByCategory[category] ?? []
-                        let total = bills.reduce(0) { $0 + ($1.amount ?? 0) }
+                        let total = calculateTotalForBills(bills)
                         
                         NavigationLink(destination: CategoryBillsView(category: category)) {
                             HStack {

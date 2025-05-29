@@ -104,42 +104,30 @@ final class User {
         // Try to load from iCloud first
         if let data = try? await secureStorage.loadFromiCloud(key: cloudKitKey) {
             let userDataDict = try JSONDecoder().decode([String: String].self, from: data)
-            
-            id = userDataDict["id"]
-            email = userDataDict["email"]
-            name = userDataDict["name"]
-            
-            if let createdAtString = userDataDict["createdAt"],
-               let createdAtTimeInterval = Double(createdAtString) {
-                createdAt = Date(timeIntervalSince1970: createdAtTimeInterval)
-            }
-            
-            if let lastLoginString = userDataDict["lastLoginDate"],
-               let lastLoginTimeInterval = Double(lastLoginString) {
-                lastLoginDate = Date(timeIntervalSince1970: lastLoginTimeInterval)
-            }
-            
-            deviceIdentifier = userDataDict["deviceIdentifier"] ?? deviceIdentifier
+            updateFromDictionary(userDataDict)
         } else if let data = try? secureStorage.loadFromKeychain(key: cloudKitKey) {
             // Fall back to Keychain if iCloud fails
             let userDataDict = try JSONDecoder().decode([String: String].self, from: data)
-            
-            id = userDataDict["id"]
-            email = userDataDict["email"]
-            name = userDataDict["name"]
-            
-            if let createdAtString = userDataDict["createdAt"],
-               let createdAtTimeInterval = Double(createdAtString) {
-                createdAt = Date(timeIntervalSince1970: createdAtTimeInterval)
-            }
-            
-            if let lastLoginString = userDataDict["lastLoginDate"],
-               let lastLoginTimeInterval = Double(lastLoginString) {
-                lastLoginDate = Date(timeIntervalSince1970: lastLoginTimeInterval)
-            }
-            
-            deviceIdentifier = userDataDict["deviceIdentifier"] ?? deviceIdentifier
+            updateFromDictionary(userDataDict)
         }
+    }
+    
+    private func updateFromDictionary(_ dict: [String: String]) {
+        id = dict["id"]
+        email = dict["email"]
+        name = dict["name"]
+        
+        if let createdAtString = dict["createdAt"],
+           let createdAtTimeInterval = Double(createdAtString) {
+            createdAt = Date(timeIntervalSince1970: createdAtTimeInterval)
+        }
+        
+        if let lastLoginString = dict["lastLoginDate"],
+           let lastLoginTimeInterval = Double(lastLoginString) {
+            lastLoginDate = Date(timeIntervalSince1970: lastLoginTimeInterval)
+        }
+        
+        deviceIdentifier = dict["deviceIdentifier"] ?? deviceIdentifier
     }
     
     func deleteSecureData() async throws {

@@ -53,26 +53,42 @@ struct SpenDataApp: App {
                 MonthlySpending.self
             ])
             
-            // Configure CloudKit sync
+            // Configure CloudKit sync with proper options
             let modelConfiguration = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: false,
                 allowsSave: true,
-                cloudKitDatabase: .automatic
+                groupContainer: .identifier("group.com.spendata.container")
             )
             
-            // Create a single container instance
-            modelContainer = try ModelContainer(
-                for: schema,
-                configurations: [modelConfiguration]
-            )
-            
-            print("Successfully initialized ModelContainer")
-            
+            // Create a single container instance with error handling
+            do {
+                modelContainer = try ModelContainer(
+                    for: schema,
+                    configurations: [modelConfiguration]
+                )
+                print("Successfully initialized ModelContainer with CloudKit sync")
+            } catch {
+                print("Failed to initialize ModelContainer with CloudKit: \(error)")
+                
+                // Fallback to local storage without CloudKit
+                let localConfig = ModelConfiguration(
+                    schema: schema,
+                    isStoredInMemoryOnly: false,
+                    allowsSave: true,
+                    groupContainer: .identifier("group.com.spendata.container")
+                )
+                
+                modelContainer = try ModelContainer(
+                    for: schema,
+                    configurations: [localConfig]
+                )
+                print("Successfully initialized ModelContainer with local storage")
+            }
         } catch {
-            print("ModelContainer initialization error: \(error)")
+            print("Fatal error initializing ModelContainer: \(error)")
             
-            // Try with in-memory configuration
+            // Last resort: in-memory configuration
             do {
                 let inMemoryConfig = ModelConfiguration(isStoredInMemoryOnly: true)
                 modelContainer = try ModelContainer(
@@ -91,18 +107,25 @@ struct SpenDataApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .modelContainer(modelContainer) // Use the single container instance
-                .onReceive(NotificationCenter.default.publisher(for: .transactionDataDidChange)) { _ in
-                    // Refresh the view when transaction data changes
-                    try? modelContainer.mainContext.save()
-                }
-                .task {
-                    // Set up CloudKit sync after view appears
-                    await syncService.setupSubscriptions()
-                }
-                .refreshable {
-                    // Pull to refresh
-                    await syncService.syncData()
+                .modelContainer(for: [
+                    User.self,
+                    Transaction.self,
+                    Bill.self,
+                    BillBudget.self,
+                    TransactionBudget.self,
+                    Income.self,
+                    FinancialGoal.self,
+                    MonthlySpending.self
+                ]) { result in
+                    switch result {
+                    case .success(let container):
+                        // Configure CloudKit sync
+                        Task {
+                            await SyncService.shared.initializeSync()
+                        }
+                    case .failure(let error):
+                        print("Failed to create model container: \(error)")
+                    }
                 }
         }
     }

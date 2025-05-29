@@ -89,6 +89,16 @@ struct SettingsView: View {
                 Text("Are you sure you want to sign out?")
             }
         }
+        .task {
+            if let user = users.first {
+                do {
+                    try await user.loadSecureData()
+                    try modelContext.save()
+                } catch {
+                    print("Error loading user data: \(error)")
+                }
+            }
+        }
     }
     
     private func deleteAccount() {
@@ -132,8 +142,65 @@ struct BillsListView: View {
     @Query private var bills: [Bill]
     @State private var showingAddBill = false
     
-    private var billsByCategory: [String: [Bill]] {
-        Dictionary(grouping: bills) { $0.category ?? "Uncategorized" }
+    private struct UniqueBill: Identifiable, Hashable {
+        let id: String
+        let name: String
+        let amount: Double
+        let category: String
+        let issuer: String
+        let firstInstallment: Date
+        let recurrence: String
+        let isShared: Bool
+        let numberOfShares: Int
+        
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(name)
+            hasher.combine(issuer)
+            hasher.combine(category)
+        }
+        
+        static func == (lhs: UniqueBill, rhs: UniqueBill) -> Bool {
+            lhs.name == rhs.name && lhs.issuer == rhs.issuer && lhs.category == rhs.category
+        }
+    }
+    
+    private var uniqueBills: [UniqueBill] {
+        let uniqueBills = Set(bills.map { bill in
+            UniqueBill(
+                id: bill.id ?? UUID().uuidString,
+                name: bill.name ?? "",
+                amount: bill.amount,
+                category: bill.category ?? "Uncategorized",
+                issuer: bill.issuer ?? "",
+                firstInstallment: bill.firstInstallment,
+                recurrence: bill.recurrence ?? "",
+                isShared: bill.isShared,
+                numberOfShares: bill.numberOfShares
+            )
+        })
+        return Array(uniqueBills)
+    }
+    
+    private var billsByCategory: [String: [UniqueBill]] {
+        Dictionary(grouping: uniqueBills) { $0.category }
+    }
+    
+    private func calculateMonthlyAmount(for bill: UniqueBill) -> Double {
+        let baseAmount = bill.amount / Double(bill.isShared ? bill.numberOfShares : 1)
+        guard let recurrenceEnum = BillRecurrence(rawValue: bill.recurrence) else {
+            return baseAmount
+        }
+        
+        switch recurrenceEnum {
+        case .monthly:
+            return baseAmount
+        case .quarterly:
+            return baseAmount / 3
+        case .yearly:
+            return baseAmount / 12
+        case .custom:
+            return baseAmount // For custom, we'll assume monthly for now
+        }
     }
     
     var body: some View {
@@ -152,7 +219,8 @@ struct BillsListView: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        if let total = billsByCategory[category]?.reduce(0, { $0 + ($1.amount ?? 0) }) {
+                        if let bills = billsByCategory[category] {
+                            let total = bills.reduce(0) { $0 + calculateMonthlyAmount(for: $1) }
                             Text(FormattingUtils.formatCurrency(total))
                                 .font(.headline)
                         }
@@ -181,6 +249,28 @@ struct CategoryBillsView: View {
     @Query private var bills: [Bill]
     @Environment(\.modelContext) private var modelContext
     
+    private struct UniqueBill: Identifiable, Hashable {
+        let id: String
+        let name: String
+        let amount: Double
+        let category: String
+        let issuer: String
+        let firstInstallment: Date
+        let recurrence: String
+        let isShared: Bool
+        let numberOfShares: Int
+        
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(name)
+            hasher.combine(issuer)
+            hasher.combine(category)
+        }
+        
+        static func == (lhs: UniqueBill, rhs: UniqueBill) -> Bool {
+            lhs.name == rhs.name && lhs.issuer == rhs.issuer && lhs.category == rhs.category
+        }
+    }
+    
     init(category: String) {
         self.category = category
         let predicate = #Predicate<Bill> { bill in
@@ -189,35 +279,86 @@ struct CategoryBillsView: View {
         _bills = Query(filter: predicate)
     }
     
+    private var uniqueBills: [UniqueBill] {
+        let uniqueBills = Set(bills.map { bill in
+            UniqueBill(
+                id: bill.id ?? UUID().uuidString,
+                name: bill.name ?? "",
+                amount: bill.amount,
+                category: bill.category ?? "Uncategorized",
+                issuer: bill.issuer ?? "",
+                firstInstallment: bill.firstInstallment,
+                recurrence: bill.recurrence ?? "",
+                isShared: bill.isShared,
+                numberOfShares: bill.numberOfShares
+            )
+        })
+        return Array(uniqueBills)
+    }
+    
+    private func calculateMonthlyAmount(for bill: UniqueBill) -> Double {
+        let baseAmount = bill.amount / Double(bill.isShared ? bill.numberOfShares : 1)
+        guard let recurrenceEnum = BillRecurrence(rawValue: bill.recurrence) else {
+            return baseAmount
+        }
+        
+        switch recurrenceEnum {
+        case .monthly:
+            return baseAmount
+        case .quarterly:
+            return baseAmount / 3
+        case .yearly:
+            return baseAmount / 12
+        case .custom:
+            return baseAmount // For custom, we'll assume monthly for now
+        }
+    }
+    
+    private func findOriginalBill(for uniqueBill: UniqueBill) -> Bill? {
+        bills.first { bill in
+            bill.name == uniqueBill.name &&
+            bill.issuer == uniqueBill.issuer &&
+            bill.category == uniqueBill.category
+        }
+    }
+    
     var body: some View {
         List {
-            ForEach(bills) { bill in
-                NavigationLink(destination: BillDetailView(bill: bill)) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(bill.name ?? "Unnamed Bill")
-                                .font(.headline)
-                            Spacer()
-                            Text(FormattingUtils.formatCurrency(bill.amount ?? 0))
-                                .font(.headline)
+            ForEach(uniqueBills) { uniqueBill in
+                if let originalBill = findOriginalBill(for: uniqueBill) {
+                    NavigationLink(destination: BillDetailView(bill: originalBill)) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(uniqueBill.name)
+                                    .font(.headline)
+                                Spacer()
+                                Text(FormattingUtils.formatCurrency(calculateMonthlyAmount(for: uniqueBill)))
+                                    .font(.headline)
+                            }
+                            
+                            HStack {
+                                Text(uniqueBill.issuer)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text("Next due: \(uniqueBill.firstInstallment, style: .date)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            if uniqueBill.isShared {
+                                Text("Shared: \(uniqueBill.numberOfShares) people")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            if !uniqueBill.recurrence.isEmpty {
+                                Text("Recurrence: \(uniqueBill.recurrence)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        
-                        HStack {
-                            Text(bill.issuer ?? "Unknown Issuer")
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text("Next due: \(bill.firstInstallment, style: .date)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        
-                        if bill.isShared {
-                            Text("Shared: \(bill.numberOfShares) people")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
                 }
             }
             .onDelete(perform: deleteBills)
@@ -232,8 +373,16 @@ struct CategoryBillsView: View {
     
     private func deleteBills(at offsets: IndexSet) {
         for index in offsets {
-            let bill = bills[index]
-            modelContext.delete(bill)
+            let uniqueBill = uniqueBills[index]
+            // Delete all instances of this bill
+            let billsToDelete = bills.filter { bill in
+                bill.name == uniqueBill.name &&
+                bill.issuer == uniqueBill.issuer &&
+                bill.category == uniqueBill.category
+            }
+            for bill in billsToDelete {
+                modelContext.delete(bill)
+            }
         }
         
         do {

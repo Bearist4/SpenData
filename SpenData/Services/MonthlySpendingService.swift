@@ -6,82 +6,72 @@ class MonthlySpendingService {
     
     private init() {}
     
-    func calculateAndStoreMonthlySpending(modelContext: ModelContext) async {
-        print("\n=== CALCULATING MONTHLY SPENDING ===")
+    func calculateAndStoreMonthlySpending(for goal: FinancialGoal, modelContext: ModelContext) async throws {
         let calendar = Calendar.current
         let now = Date()
         let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now))!
-        let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
+        let endOfMonth = calendar.date(byAdding: DateComponents(month: 1, day: -1), to: startOfMonth)!
         
-        // Get all transactions and bills
-        let transactionDescriptor = FetchDescriptor<Transaction>()
-        let billDescriptor = FetchDescriptor<Bill>()
+        // Get all transactions for the current month
+        let transactionDescriptor = FetchDescriptor<Transaction>(
+            predicate: #Predicate<Transaction> { transaction in
+                transaction.date >= startOfMonth && transaction.date < endOfMonth
+            }
+        )
+        let transactions = try modelContext.fetch(transactionDescriptor)
         
-        guard let transactions = try? modelContext.fetch(transactionDescriptor),
-              let bills = try? modelContext.fetch(billDescriptor) else {
-            print("Failed to fetch transactions or bills")
-            return
-        }
+        // Get all bills for the current month
+        let billDescriptor = FetchDescriptor<Bill>(
+            predicate: #Predicate<Bill> { bill in
+                bill.firstInstallment >= startOfMonth && bill.firstInstallment < endOfMonth
+            }
+        )
+        let bills = try modelContext.fetch(billDescriptor)
         
-        print("Found \(transactions.count) transactions and \(bills.count) bills")
-        
-        // Filter current month's transactions and bills
-        let currentMonthTransactions = transactions.filter { $0.date >= startOfMonth && $0.date < endOfMonth }
-        let currentMonthBills = bills.filter { $0.firstInstallment >= startOfMonth && $0.firstInstallment < endOfMonth }
-        
-        print("\nCurrent month transactions: \(currentMonthTransactions.count)")
-        print("Current month bills: \(currentMonthBills.count)")
-        
-        // Calculate category totals
-        var categoryTotals: [String: Double] = [:]
+        // Calculate category spending
+        var categorySpending: [String: Double] = [:]
         
         // Process transactions
-        for transaction in currentMonthTransactions {
+        for transaction in transactions {
             let category = transaction.category ?? "Uncategorized"
-            categoryTotals[category, default: 0] += abs(transaction.amount)
+            let amount = abs(transaction.amount)
+            categorySpending[category, default: 0] += amount
         }
         
         // Process bills
-        for bill in currentMonthBills {
+        for bill in bills {
             let category = bill.category ?? "Uncategorized"
             let amount = bill.amount ?? 0
-            categoryTotals[category, default: 0] += amount
+            categorySpending[category, default: 0] += amount
         }
         
-        // Print category breakdown
-        print("\nCategory breakdown for \(calendar.component(.month, from: now))/\(calendar.component(.year, from: now)):")
-        for (category, amount) in categoryTotals.sorted(by: { $0.value > $1.value }) {
-            print("\(category): \(FormattingUtils.formatCurrency(amount))")
-        }
+        // Calculate target savings
+        let spending = goal.calculateMonthlySpending(from: transactions, bills: bills)
+        let totalNeeds = spending.needs
+        let totalWants = spending.wants
+        let totalNotAccounted = spending.notAccounted
         
-        // Check if we already have a record for this month
-        let descriptor = FetchDescriptor<MonthlySpending>(
-            predicate: #Predicate<MonthlySpending> { spending in
-                spending.month >= startOfMonth && spending.month < endOfMonth
-            }
+        // Get monthly income from the goal's user's incomes
+        let incomeDescriptor = FetchDescriptor<Income>()
+        let allIncomes = try modelContext.fetch(incomeDescriptor)
+        let monthlyIncome = allIncomes.reduce(0.0) { $0 + $1.amount }
+        
+        let targetSavings = monthlyIncome - totalNeeds - totalWants - totalNotAccounted
+        
+        // Create or update monthly spending record
+        let monthlySpending = MonthlySpending(
+            month: startOfMonth,
+            categorySpending: categorySpending,
+            targetSavings: targetSavings
         )
         
-        if let existingSpending = try? modelContext.fetch(descriptor).first {
-            // Update existing record
-            existingSpending.categorySpending = categoryTotals
-            print("\nUpdated existing monthly spending record")
-        } else {
-            // Create new record
-            let monthlySpending = MonthlySpending(
-                month: startOfMonth,
-                categorySpending: categoryTotals
-            )
-            modelContext.insert(monthlySpending)
-            print("\nCreated new monthly spending record")
+        // Add to goal's monthly spending
+        if goal.monthlySpending == nil {
+            goal.monthlySpending = []
         }
+        goal.monthlySpending?.append(monthlySpending)
         
-        // Save changes
-        do {
-            try modelContext.save()
-            print("Successfully saved monthly spending data")
-        } catch {
-            print("Error saving monthly spending data: \(error)")
-        }
+        try modelContext.save()
     }
     
     func getCurrentMonthSpending(modelContext: ModelContext) -> [String: Double] {

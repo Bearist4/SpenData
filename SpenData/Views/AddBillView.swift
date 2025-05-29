@@ -152,51 +152,20 @@ struct AddBillView: View {
         }
         
         let recurrenceString = recurrence.rawValue
-        let firstDate = firstInstallment
-        let maxMonthsAhead = 24
-        let calendar = Calendar.current
-        var billsToInsert: [Bill] = []
         
-        // Always insert the first instance
+        // Create only the initial bill instance
         let newBill = Bill(
             name: name,
             amount: amountValue,
             category: category.rawValue,
             issuer: issuer,
-            firstInstallment: firstDate,
+            firstInstallment: firstInstallment,
             recurrence: recurrenceString,
             isShared: isShared,
             numberOfShares: numberOfShares
         )
-        billsToInsert.append(newBill)
         
-        // Generate future instances if recurring
-        if recurrence != .custom && recurrence != .custom {
-            if let recurrenceEnum = BillRecurrence(rawValue: recurrenceString) {
-                var currentDate = firstDate
-                for _ in 1...maxMonthsAhead {
-                    let nextDate = recurrenceEnum.nextDueDate(from: currentDate)
-                    // Stop if nextDate is not after currentDate (safety for custom)
-                    if nextDate <= currentDate { break }
-                    let futureBill = Bill(
-                        name: name,
-                        amount: amountValue,
-                        category: category.rawValue,
-                        issuer: issuer,
-                        firstInstallment: nextDate,
-                        recurrence: recurrenceString,
-                        isShared: isShared,
-                        numberOfShares: numberOfShares
-                    )
-                    billsToInsert.append(futureBill)
-                    currentDate = nextDate
-                }
-            }
-        }
-        
-        for bill in billsToInsert {
-            modelContext.insert(bill)
-        }
+        modelContext.insert(newBill)
         
         do {
             try modelContext.save()
@@ -221,11 +190,30 @@ struct AddBillView: View {
                         numberOfShares = 2
                         alertMessage = "Bill added successfully!"
                         showingAlert = true
+                        dismiss()
                     }
-                } catch {
+                } catch let error as NSError {
                     print("❌ Failed to save bill to secure storage: \(error)")
-                    await MainActor.run {
+                    
+                    // Handle specific CloudKit errors
+                    if error.domain == "CloudKit" {
+                        switch error.code {
+                        case 1: // CKError.serverRecordChanged
+                            alertMessage = "The bill was saved locally but couldn't sync with iCloud. Please try again later."
+                        case 2: // CKError.zoneNotFound
+                            alertMessage = "iCloud sync is not available. Please check your iCloud settings."
+                        case 3: // CKError.operationCancelled
+                            alertMessage = "iCloud sync was cancelled. The bill was saved locally."
+                        case 4: // CKError.changeTokenExpired
+                            alertMessage = "iCloud sync needs to be refreshed. The bill was saved locally."
+                        default:
+                            alertMessage = "Failed to sync with iCloud: \(error.localizedDescription)"
+                        }
+                    } else {
                         alertMessage = "Failed to save bill to secure storage: \(error.localizedDescription)"
+                    }
+                    
+                    await MainActor.run {
                         showingAlert = true
                     }
                 }

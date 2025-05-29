@@ -98,6 +98,94 @@ struct GoalListItem: View {
     let bills: [Bill]
     let incomes: [Income]
     
+    // Add computed properties for calculations
+    private var currentMonthBills: [Bill] {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now))!
+        let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
+        return bills.filter { $0.firstInstallment >= startOfMonth && $0.firstInstallment < endOfMonth }
+    }
+    
+    private var currentMonthTransactions: [Transaction] {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now))!
+        let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
+        return transactions.filter { $0.date >= startOfMonth && $0.date < endOfMonth }
+    }
+    
+    private var uniqueBills: [String: Bill] {
+        var bills: [String: Bill] = [:]
+        for bill in currentMonthBills {
+            if let name = bill.name {
+                let key = "\(name)_\(bill.category ?? "Uncategorized")"
+                bills[key] = bill
+            }
+        }
+        return bills
+    }
+    
+    private var billNeeds: Double {
+        uniqueBills.values
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .need }
+            .reduce(into: 0.0) { result, bill in
+                let billAmount = (bill.amount ?? 0).rounded(to: 2)
+                let amount = bill.isShared ? (billAmount / Double(bill.numberOfShares)).rounded(to: 2) : billAmount
+                result += amount
+            }
+    }
+    
+    private var billWants: Double {
+        uniqueBills.values
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .want }
+            .reduce(into: 0.0) { result, bill in
+                let billAmount = (bill.amount ?? 0).rounded(to: 2)
+                let amount = bill.isShared ? (billAmount / Double(bill.numberOfShares)).rounded(to: 2) : billAmount
+                result += amount
+            }
+    }
+    
+    private var transactionNeeds: Double {
+        currentMonthTransactions
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .need }
+            .reduce(into: 0.0) { result, transaction in
+                result += abs(transaction.amount)
+            }
+    }
+    
+    private var transactionWants: Double {
+        currentMonthTransactions
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .want }
+            .reduce(into: 0.0) { result, transaction in
+                result += abs(transaction.amount)
+            }
+    }
+    
+    private var monthlyIncome: Double {
+        incomes.reduce(0) { $0 + $1.amount }
+    }
+    
+    private var totalNeeds: Double {
+        billNeeds + transactionNeeds
+    }
+    
+    private var totalWants: Double {
+        billWants + transactionWants
+    }
+    
+    private var monthlySavings: Double {
+        monthlyIncome - (totalNeeds + totalWants)
+    }
+    
+    private var requiredMonthlySavings: Double {
+        goal.requiredMonthlySavings ?? 0
+    }
+    
+    private var savingsProgress: Double {
+        requiredMonthlySavings > 0 ? min(monthlySavings / requiredMonthlySavings, 1.0) : 0.0
+    }
+    
     var body: some View {
         NavigationLink(destination: FinancialGoalDetailView(goal: goal, transactions: transactions, bills: bills, incomes: incomes)) {
             VStack(alignment: .leading, spacing: 8) {
@@ -117,39 +205,6 @@ struct GoalListItem: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                
-                // Current Month Progress
-                let calendar = Calendar.current
-                let now = Date()
-                let startOfMonth = calendar.date(from: calendar.dateComponents([.year, .month], from: now))!
-                let endOfMonth = calendar.date(byAdding: .month, value: 1, to: startOfMonth)!
-                
-                // Get current month's transactions and bills
-                let currentMonthTransactions = transactions.filter { $0.date >= startOfMonth && $0.date < endOfMonth }
-                let currentMonthBills = bills.filter { $0.firstInstallment >= startOfMonth && $0.firstInstallment < endOfMonth }
-                
-                // Calculate current month's spending
-                let currentSpending = goal.calculateMonthlySpending(from: currentMonthTransactions, bills: currentMonthBills)
-                
-                // Calculate bill amounts
-                let billNeeds = currentMonthBills.filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .need }
-                    .reduce(0) { $0 + ($1.amount ?? 0) }
-                let billWants = currentMonthBills.filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .want }
-                    .reduce(0) { $0 + ($1.amount ?? 0) }
-                
-                // Calculate transaction amounts
-                let transactionNeeds = currentSpending.needs - billNeeds
-                let transactionWants = currentSpending.wants - billWants
-                
-                // Calculate monthly savings
-                let monthlyIncome = incomes.reduce(0) { $0 + $1.amount }
-                let monthlySavings = monthlyIncome - (currentSpending.needs + currentSpending.wants + currentSpending.notAccounted)
-                
-                // Calculate required monthly savings
-                let requiredMonthlySavings = goal.requiredMonthlySavings ?? 0
-                
-                // Progress towards monthly savings goal
-                let savingsProgress = requiredMonthlySavings > 0 ? min(monthlySavings / requiredMonthlySavings, 1.0) : 0.0
                 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("This Month's Progress")
@@ -331,7 +386,32 @@ struct FinancialGoalDetailView: View {
     }
     
     private var monthlyIncome: Double {
-        incomes.reduce(0) { $0 + $1.amount }
+        let range = MonthRange.forDate(selectedMonth)
+        let filteredIncomes = incomes.filter { income in
+            // Check if the income's first payment is before or during the selected month
+            income.firstPayment <= range.end &&
+            // For monthly incomes, check if they're active in this month
+            (income.frequency == IncomeFrequency.monthly.rawValue ||
+             // For other frequencies, check if they have a payment in this month
+             income.nextPaymentDate >= range.start && income.nextPaymentDate < range.end)
+        }
+        
+        // Debug information
+        print("\nMonthly Income Calculation:")
+        print("Month: \(selectedMonth.formatted(.dateTime.month().year()))")
+        print("Date Range: \(range.start.formatted()) to \(range.end.formatted())")
+        print("\nFiltered Incomes:")
+        for income in filteredIncomes {
+            print("\(income.name ?? "Unnamed"): \(FormattingUtils.formatCurrency(income.amount))")
+            print("  First Payment: \(income.firstPayment.formatted())")
+            print("  Frequency: \(income.frequency ?? "Unknown")")
+            print("  Next Payment: \(income.nextPaymentDate.formatted())")
+        }
+        
+        let total = filteredIncomes.reduce(0.0) { $0 + $1.amount }
+        print("\nTotal Monthly Income: \(FormattingUtils.formatCurrency(total))")
+        
+        return total
     }
     
     private var availableMonths: [Date] {
@@ -364,7 +444,11 @@ struct FinancialGoalDetailView: View {
                 )) {
                     MonthListItem(
                         month: month,
-                        status: getSavingsStatus(for: month)
+                        status: getSavingsStatus(for: month),
+                        goal: goal,
+                        transactions: transactions,
+                        bills: bills,
+                        incomes: incomes
                     )
                 }
             }
@@ -430,6 +514,93 @@ enum SavingsStatus {
 struct MonthListItem: View {
     let month: Date
     let status: (status: SavingsStatus, amount: Double)
+    let goal: FinancialGoal
+    let transactions: [Transaction]
+    let bills: [Bill]
+    let incomes: [Income]
+    
+    private var monthBills: [Bill] {
+        let range = MonthRange.forDate(month)
+        return bills.filter { bill in
+            bill.firstInstallment >= range.start && bill.firstInstallment < range.end
+        }
+    }
+    
+    private var monthTransactions: [Transaction] {
+        let range = MonthRange.forDate(month)
+        return transactions.filter { transaction in
+            transaction.date >= range.start && transaction.date < range.end
+        }
+    }
+    
+    private var uniqueBills: [String: Bill] {
+        var bills: [String: Bill] = [:]
+        for bill in monthBills {
+            if let name = bill.name {
+                let key = "\(name)_\(bill.category ?? "Uncategorized")"
+                bills[key] = bill
+            }
+        }
+        return bills
+    }
+    
+    private var billNeeds: Double {
+        uniqueBills.values
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .need }
+            .reduce(into: 0.0) { result, bill in
+                let billAmount = (bill.amount ?? 0).rounded(to: 2)
+                let amount = bill.isShared ? (billAmount / Double(bill.numberOfShares)).rounded(to: 2) : billAmount
+                result += amount
+            }
+    }
+    
+    private var billWants: Double {
+        uniqueBills.values
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .want }
+            .reduce(into: 0.0) { result, bill in
+                let billAmount = (bill.amount ?? 0).rounded(to: 2)
+                let amount = bill.isShared ? (billAmount / Double(bill.numberOfShares)).rounded(to: 2) : billAmount
+                result += amount
+            }
+    }
+    
+    private var transactionNeeds: Double {
+        monthTransactions
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .need }
+            .reduce(into: 0.0) { result, transaction in
+                result += abs(transaction.amount)
+            }
+    }
+    
+    private var transactionWants: Double {
+        monthTransactions
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .want }
+            .reduce(into: 0.0) { result, transaction in
+                result += abs(transaction.amount)
+            }
+    }
+    
+    private var monthlyIncome: Double {
+        let range = MonthRange.forDate(month)
+        let filteredIncomes = incomes.filter { income in
+            income.firstPayment <= range.end &&
+            (income.frequency == IncomeFrequency.monthly.rawValue ||
+             income.nextPaymentDate >= range.start && income.nextPaymentDate < range.end)
+        }
+        return filteredIncomes.reduce(0.0) { $0 + $1.amount }
+    }
+    
+    private var totalNeeds: Double {
+        billNeeds + transactionNeeds
+    }
+    
+    private var totalWants: Double {
+        billWants + transactionWants
+    }
+    
+    private var monthlySavings: Double {
+        monthlyIncome - (totalNeeds + totalWants)
+    }
     
     var body: some View {
         HStack {
@@ -443,7 +614,7 @@ struct MonthListItem: View {
             
             Spacer()
             
-            Text(FormattingUtils.formatCurrency(status.amount))
+            Text(FormattingUtils.formatCurrency(monthlySavings))
                 .foregroundStyle(status.status.color)
         }
         .padding(.vertical, 4)
@@ -460,16 +631,40 @@ struct MonthDetailView: View {
     let incomes: [Income]
     
     @Query private var allIncomes: [Income]
+    @State private var showingActualSavingsInput = false
+    @State private var actualSavingsAmount: String = ""
     
-    private var monthIncomes: [Income] {
-        let range = MonthRange.forDate(month)
-        return incomes.filter { income in
-            income.firstPayment >= range.start && income.firstPayment < range.end
-        }
+    private var monthlySpending: MonthlySpending? {
+        goal.monthlySpending?.first { Calendar.current.isDate($0.month, equalTo: month, toGranularity: .month) }
     }
     
     private var monthlyIncome: Double {
-        monthIncomes.reduce(0) { $0 + $1.amount }
+        let range = MonthRange.forDate(month)
+        let filteredIncomes = incomes.filter { income in
+            // Check if the income's first payment is before or during the selected month
+            income.firstPayment <= range.end &&
+            // For monthly incomes, check if they're active in this month
+            (income.frequency == IncomeFrequency.monthly.rawValue ||
+             // For other frequencies, check if they have a payment in this month
+             income.nextPaymentDate >= range.start && income.nextPaymentDate < range.end)
+        }
+        
+        // Debug information
+        print("\nMonthly Income Calculation:")
+        print("Month: \(month.formatted(.dateTime.month().year()))")
+        print("Date Range: \(range.start.formatted()) to \(range.end.formatted())")
+        print("\nFiltered Incomes:")
+        for income in filteredIncomes {
+            print("\(income.name ?? "Unnamed"): \(FormattingUtils.formatCurrency(income.amount))")
+            print("  First Payment: \(income.firstPayment.formatted())")
+            print("  Frequency: \(income.frequency ?? "Unknown")")
+            print("  Next Payment: \(income.nextPaymentDate.formatted())")
+        }
+        
+        let total = filteredIncomes.reduce(0.0) { $0 + $1.amount }
+        print("\nTotal Monthly Income: \(FormattingUtils.formatCurrency(total))")
+        
+        return total
     }
     
     private var spending: (needs: Double, wants: Double, notAccounted: Double) {
@@ -507,28 +702,67 @@ struct MonthDetailView: View {
     
     private var billNeeds: Double {
         let monthBills = getBillsForMonth(month)
-        let needs = monthBills.filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .need }
-            .reduce(0) { $0 + ($1.amount ?? 0) }
+        print("\n=== Detailed Bill Needs Calculation ===")
+        print("Total bills found: \(monthBills.count)")
         
-        // Debug information
-        print("\nBill Needs Calculation:")
-        for bill in monthBills where goal.getCategoryType(for: bill.category ?? "Uncategorized", isBill: true) == .need {
-            print("\(bill.category ?? "Uncategorized"): \(FormattingUtils.formatCurrency(bill.amount ?? 0))")
+        // Create a dictionary to store unique bills by name
+        var uniqueBills: [String: Bill] = [:]
+        for bill in monthBills {
+            if let name = bill.name {
+                uniqueBills[name] = bill
+            }
         }
-        print("Total Bill Needs: \(FormattingUtils.formatCurrency(needs))")
+        
+        print("\nUnique bills found: \(uniqueBills.count)")
+        
+        let needs = uniqueBills.values
+            .filter { bill in
+                let category = bill.category ?? "Uncategorized"
+                let type = goal.getCategoryType(for: category, isBill: true)
+                let isNeed = type == .need
+                print("\nBill: \(bill.name ?? "Unnamed")")
+                print("Category: \(category)")
+                print("Type: \(type.rawValue)")
+                print("Is Need: \(isNeed)")
+                print("Amount: \(bill.amount ?? 0)")
+                print("Is Shared: \(bill.isShared)")
+                print("Number of Shares: \(bill.numberOfShares)")
+                return isNeed
+            }
+            .reduce(into: 0.0) { result, bill in
+                let billAmount = (bill.amount ?? 0).rounded(to: 2)
+                // If bill is shared, divide by number of shares. If not shared, use full amount
+                let amount = bill.isShared ? (billAmount / Double(bill.numberOfShares)).rounded(to: 2) : billAmount
+                print("\nCalculating amount for: \(bill.name ?? "Unnamed")")
+                print("Original amount: \(billAmount)")
+                print("Is Shared: \(bill.isShared)")
+                print("Number of Shares: \(bill.numberOfShares)")
+                print("Final amount: \(amount)")
+                result = (result + amount).rounded(to: 2)
+                print("Running total: \(result)")
+            }
+        
+        print("\nFinal Total Bill Needs: \(FormattingUtils.formatCurrency(needs))")
+        print("=== End Bill Needs Calculation ===\n")
         
         return needs
     }
     
     private var billWants: Double {
         let monthBills = getBillsForMonth(month)
-        let wants = monthBills.filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .want }
-            .reduce(0) { $0 + ($1.amount ?? 0) }
+        let wants = monthBills
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .want }
+            .reduce(into: 0.0) { result, bill in
+                // Calculate the actual amount based on whether the bill is shared
+                let billAmount = bill.amount / Double(bill.isShared ? bill.numberOfShares : 1)
+                result += billAmount
+            }
         
         // Debug information
         print("\nBill Wants Calculation:")
         for bill in monthBills where goal.getCategoryType(for: bill.category ?? "Uncategorized", isBill: true) == .want {
-            print("\(bill.category ?? "Uncategorized"): \(FormattingUtils.formatCurrency(bill.amount ?? 0))")
+            let billAmount = bill.amount / Double(bill.isShared ? bill.numberOfShares : 1)
+            print("\(bill.category ?? "Uncategorized"): \(FormattingUtils.formatCurrency(billAmount))")
         }
         print("Total Bill Wants: \(FormattingUtils.formatCurrency(wants))")
         
@@ -537,8 +771,12 @@ struct MonthDetailView: View {
     
     private var transactionNeeds: Double {
         let monthTransactions = getTransactionsForMonth(month)
-        let needs = monthTransactions.filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .need }
-            .reduce(0) { $0 + abs($1.amount) }
+        let needs = monthTransactions
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .need }
+            .reduce(into: 0.0) { result, transaction in
+                // Use absolute value for expenses
+                result += abs(transaction.amount)
+            }
         
         // Debug information
         print("\nTransaction Needs Calculation:")
@@ -566,8 +804,37 @@ struct MonthDetailView: View {
     }
     
     private var monthlySavings: Double {
-        let totalSpending = spending.needs + spending.wants + spending.notAccounted
-        return monthlyIncome - totalSpending
+        // Get all transactions and bills for the selected month
+        let monthTransactions = getTransactionsForMonth(month)
+        let monthBills = getBillsForMonth(month)
+        
+        // Calculate transaction expenses
+        let transactionExpenses = monthTransactions.reduce(into: 0.0) { result, transaction in
+            result += abs(transaction.amount)
+        }
+        
+        // Calculate bill expenses
+        let billExpenses = monthBills.reduce(into: 0.0) { result, bill in
+            // Calculate the actual amount based on whether the bill is shared
+            let billAmount = bill.amount / Double(bill.isShared ? bill.numberOfShares : 1)
+            result += billAmount
+        }
+        
+        // Calculate total expenses
+        let totalExpenses = transactionExpenses + billExpenses
+        
+        // Calculate savings as income minus expenses
+        let savings = monthlyIncome - totalExpenses
+        
+        // Debug information
+        print("\nMonthly Savings Calculation:")
+        print("Monthly Income: \(FormattingUtils.formatCurrency(monthlyIncome))")
+        print("Transaction Expenses: \(FormattingUtils.formatCurrency(transactionExpenses))")
+        print("Bill Expenses: \(FormattingUtils.formatCurrency(billExpenses))")
+        print("Total Expenses: \(FormattingUtils.formatCurrency(totalExpenses))")
+        print("Monthly Savings: \(FormattingUtils.formatCurrency(savings))")
+        
+        return savings
     }
     
     private var requiredMonthlySavings: Double {
@@ -584,12 +851,83 @@ struct MonthDetailView: View {
         return monthlyIncome * (method.defaultPercentages["Wants"] ?? 0.3)
     }
     
-    private var totalNeedsSpending: Double {
-        billNeeds + transactionNeeds
+    private var totalNeeds: Double {
+        let monthBills = getBillsForMonth(month)
+        let monthTransactions = getTransactionsForMonth(month)
+        
+        print("\n=== Total Needs Calculation ===")
+        
+        // Create a dictionary to track unique bills by name and category
+        var uniqueBills: [String: Bill] = [:]
+        for bill in monthBills {
+            if let name = bill.name {
+                let key = "\(name)_\(bill.category ?? "Uncategorized")"
+                uniqueBills[key] = bill
+            }
+        }
+        
+        print("\nUnique bills found: \(uniqueBills.count)")
+        
+        // Calculate bill needs from unique bills
+        let billNeeds = uniqueBills.values
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .need }
+            .reduce(into: 0.0) { result, bill in
+                let billAmount = (bill.amount ?? 0).rounded(to: 2)
+                let amount = bill.isShared ? (billAmount / Double(bill.numberOfShares)).rounded(to: 2) : billAmount
+                print("\nBill: \(bill.name ?? "Unnamed")")
+                print("Category: \(bill.category ?? "Uncategorized")")
+                print("Original amount: \(billAmount)")
+                print("Is shared: \(bill.isShared)")
+                print("Number of shares: \(bill.numberOfShares)")
+                print("Final amount: \(amount)")
+                result += amount
+                print("Running total: \(result)")
+            }
+        
+        print("\nTotal Bill Needs: \(billNeeds)")
+        
+        // Calculate transaction needs
+        let transactionNeeds = monthTransactions
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .need }
+            .reduce(into: 0.0) { result, transaction in
+                let amount = abs(transaction.amount)
+                print("\nTransaction: \(transaction.name ?? "Unnamed")")
+                print("Category: \(transaction.category ?? "Uncategorized")")
+                print("Amount: \(amount)")
+                result += amount
+                print("Running total: \(result)")
+            }
+        
+        print("\nTotal Transaction Needs: \(transactionNeeds)")
+        
+        let total = billNeeds + transactionNeeds
+        print("\nFinal Total Needs: \(total)")
+        print("=== End Total Needs Calculation ===\n")
+        
+        return total
     }
     
-    private var totalWantsSpending: Double {
-        billWants + transactionWants
+    private var totalWants: Double {
+        let monthBills = getBillsForMonth(month)
+        let monthTransactions = getTransactionsForMonth(month)
+        
+        // Calculate bill wants
+        let billWants = monthBills
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .want }
+            .reduce(into: 0.0) { result, bill in
+                let billAmount = (bill.amount ?? 0).rounded(to: 2)
+                let amount = bill.isShared ? (billAmount / Double(bill.numberOfShares)).rounded(to: 2) : billAmount
+                result += amount
+            }
+        
+        // Calculate transaction wants
+        let transactionWants = monthTransactions
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .want }
+            .reduce(into: 0.0) { result, transaction in
+                result += abs(transaction.amount)
+            }
+        
+        return billWants + transactionWants
     }
     
     private var savingsProgress: Double {
@@ -600,13 +938,13 @@ struct MonthDetailView: View {
     
     private var needsProgress: Double {
         guard targetNeedsAmount > 0 else { return 0 }
-        let progress = totalNeedsSpending / targetNeedsAmount
+        let progress = totalNeeds / targetNeedsAmount
         return min(max(progress, 0), 1.0) // Clamp between 0 and 1
     }
     
     private var wantsProgress: Double {
         guard targetWantsAmount > 0 else { return 0 }
-        let progress = totalWantsSpending / targetWantsAmount
+        let progress = totalWants / targetWantsAmount
         return min(max(progress, 0), 1.0) // Clamp between 0 and 1
     }
     
@@ -620,76 +958,78 @@ struct MonthDetailView: View {
     }
     
     var body: some View {
-        List {
-            Section("Monthly Savings Goal") {
-                HStack {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Required Monthly Savings
+                VStack(spacing: 8) {
                     Text("Required Monthly Savings")
-                    Spacer()
-                    Text(FormattingUtils.formatCurrency(requiredMonthlySavings))
-                        .bold()
-                }
-                
-                HStack {
-                    Text("Current Monthly Savings")
-                    Spacer()
-                    Text(FormattingUtils.formatCurrency(monthlySavings))
-                        .bold()
-                        .foregroundStyle(monthlySavings >= requiredMonthlySavings ? .green : .orange)
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("Progress")
-                            .font(.caption)
-                        Spacer()
-                        Text("\(Int(savingsProgress * 100))%")
-                            .font(.caption)
-                            .foregroundStyle(savingsProgress >= 1.0 ? .green : .orange)
-                    }
+                        .font(.headline)
+                        .foregroundColor(.secondary)
                     
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            Rectangle()
-                                .fill(Color.gray.opacity(0.2))
-                                .frame(height: 8)
-                                .cornerRadius(4)
+                    Text(FormattingUtils.formatCurrency(goal.requiredMonthlySavings ?? 0))
+                        .font(.system(size: 36, weight: .bold))
+                        .foregroundColor(.green)
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(radius: 2)
+                
+                // Actual Savings Comparison
+                VStack(spacing: 8) {
+                    Text("Actual Savings")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    if let spending = monthlySpending, spending.isMonthComplete {
+                        VStack(spacing: 4) {
+                            Text(FormattingUtils.formatCurrency(spending.actualSavings))
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(spending.actualSavings >= spending.targetSavings ? .green : .red)
                             
-                            Rectangle()
-                                .fill(savingsProgress >= 1.0 ? Color.green : Color.orange)
-                                .frame(width: geometry.size.width * savingsProgress, height: 8)
-                                .cornerRadius(4)
+                            Text("Target: \(FormattingUtils.formatCurrency(spending.targetSavings))")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            
+                            let difference = spending.actualSavings - spending.targetSavings
+                            Text(difference >= 0 ? "+\(FormattingUtils.formatCurrency(difference))" : FormattingUtils.formatCurrency(difference))
+                                .font(.subheadline)
+                                .foregroundColor(difference >= 0 ? .green : .red)
+                        }
+                    } else {
+                        Button(action: { showingActualSavingsInput = true }) {
+                            Text("Log Actual Savings")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding()
+                                .frame(maxWidth: .infinity)
+                                .background(Color.blue)
+                                .cornerRadius(10)
                         }
                     }
-                    .frame(height: 8)
                 }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(radius: 2)
                 
-                if monthlySavings < requiredMonthlySavings {
-                    Text("Need to save \(FormattingUtils.formatCurrency(requiredMonthlySavings - monthlySavings)) more this month")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                }
-            }
-            
-            Section("Budget Allocation") {
-                VStack(alignment: .leading, spacing: 16) {
+                // Budget Allocation
+                VStack(spacing: 8) {
+                    Text("Budget Allocation")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
                     // Needs Progress
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text("Needs (50% of income)")
-                                .font(.headline)
+                            Text("Needs")
+                                .font(.subheadline)
                             Spacer()
                             Text("\(Int(needsProgress * 100))%")
+                                .font(.subheadline)
                                 .foregroundStyle(needsProgress <= 1.0 ? .blue : .red)
-                        }
-                        
-                        HStack {
-                            Text(FormattingUtils.formatCurrency(totalNeedsSpending))
-                                .font(.subheadline)
-                            Text("of")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Text(FormattingUtils.formatCurrency(targetNeedsAmount))
-                                .font(.subheadline)
                         }
                         
                         GeometryReader { geometry in
@@ -701,39 +1041,32 @@ struct MonthDetailView: View {
                                 
                                 Rectangle()
                                     .fill(needsProgress <= 1.0 ? Color.blue : Color.red)
-                                    .frame(width: geometry.size.width * min(needsProgress, 1.0), height: 8)
+                                    .frame(width: min(geometry.size.width * needsProgress, geometry.size.width), height: 8)
                                     .cornerRadius(4)
                             }
                         }
                         .frame(height: 8)
                         
-                        if needsProgress > 1.0 {
-                            Text("Over budget by \(FormattingUtils.formatCurrency(totalNeedsSpending - targetNeedsAmount))")
+                        HStack {
+                            Text(FormattingUtils.formatCurrency(totalNeeds))
                                 .font(.caption)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(.blue)
+                            Spacer()
+                            Text("Target: \(FormattingUtils.formatCurrency(targetNeedsAmount))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     
-                    Divider()
-                    
                     // Wants Progress
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text("Wants (30% of income)")
-                                .font(.headline)
+                            Text("Wants")
+                                .font(.subheadline)
                             Spacer()
                             Text("\(Int(wantsProgress * 100))%")
+                                .font(.subheadline)
                                 .foregroundStyle(wantsProgress <= 1.0 ? .orange : .red)
-                        }
-                        
-                        HStack {
-                            Text(FormattingUtils.formatCurrency(totalWantsSpending))
-                                .font(.subheadline)
-                            Text("of")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            Text(FormattingUtils.formatCurrency(targetWantsAmount))
-                                .font(.subheadline)
                         }
                         
                         GeometryReader { geometry in
@@ -745,66 +1078,140 @@ struct MonthDetailView: View {
                                 
                                 Rectangle()
                                     .fill(wantsProgress <= 1.0 ? Color.orange : Color.red)
-                                    .frame(width: geometry.size.width * min(wantsProgress, 1.0), height: 8)
+                                    .frame(width: min(geometry.size.width * wantsProgress, geometry.size.width), height: 8)
                                     .cornerRadius(4)
                             }
                         }
                         .frame(height: 8)
                         
-                        if wantsProgress > 1.0 {
-                            Text("Over budget by \(FormattingUtils.formatCurrency(totalWantsSpending - targetWantsAmount))")
+                        HStack {
+                            Text(FormattingUtils.formatCurrency(totalWants))
                                 .font(.caption)
-                                .foregroundStyle(.red)
+                                .foregroundStyle(.orange)
+                            Spacer()
+                            Text("Target: \(FormattingUtils.formatCurrency(targetWantsAmount))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
-            }
-            
-            Section("Spending Breakdown") {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Recurring Bills")
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(radius: 2)
+                
+                // Spending Breakdown
+                VStack(spacing: 8) {
+                    Text("Spending Breakdown")
                         .font(.headline)
+                        .foregroundColor(.secondary)
                     
+                    // Bills (Needs)
                     HStack {
-                        Text("Needs")
+                        Text("Bills (Needs)")
                             .font(.subheadline)
                         Spacer()
                         Text(FormattingUtils.formatCurrency(billNeeds))
+                            .font(.subheadline)
                             .foregroundStyle(.blue)
                     }
                     
+                    // Bills (Wants)
                     HStack {
-                        Text("Wants")
+                        Text("Bills (Wants)")
                             .font(.subheadline)
                         Spacer()
                         Text(FormattingUtils.formatCurrency(billWants))
+                            .font(.subheadline)
+                            .foregroundStyle(.orange)
+                    }
+                    
+                    // Transactions (Needs)
+                    HStack {
+                        Text("Transactions (Needs)")
+                            .font(.subheadline)
+                        Spacer()
+                        Text(FormattingUtils.formatCurrency(transactionNeeds))
+                            .font(.subheadline)
+                            .foregroundStyle(.blue)
+                    }
+                    
+                    // Transactions (Wants)
+                    HStack {
+                        Text("Transactions (Wants)")
+                            .font(.subheadline)
+                        Spacer()
+                        Text(FormattingUtils.formatCurrency(transactionWants))
+                            .font(.subheadline)
                             .foregroundStyle(.orange)
                     }
                     
                     Divider()
                     
-                    Text("One-time Expenses")
-                        .font(.headline)
-                    
+                    // Monthly Income
                     HStack {
-                        Text("Needs")
+                        Text("Monthly Income")
                             .font(.subheadline)
+                            .bold()
                         Spacer()
-                        Text(FormattingUtils.formatCurrency(transactionNeeds))
-                            .foregroundStyle(.blue)
-                    }
-                    
-                    HStack {
-                        Text("Wants")
+                        Text(FormattingUtils.formatCurrency(monthlyIncome))
                             .font(.subheadline)
-                        Spacer()
-                        Text(FormattingUtils.formatCurrency(transactionWants))
-                            .foregroundStyle(.orange)
+                            .bold()
+                            .foregroundStyle(.green)
                     }
                 }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(12)
+                .shadow(radius: 2)
+            }
+            .padding()
+        }
+        .sheet(isPresented: $showingActualSavingsInput) {
+            NavigationView {
+                Form {
+                    Section(header: Text("Enter Actual Savings")) {
+                        TextField("Amount", text: $actualSavingsAmount)
+                            .keyboardType(.decimalPad)
+                    }
+                }
+                .navigationTitle("Log Savings")
+                .navigationBarItems(
+                    leading: Button("Cancel") {
+                        showingActualSavingsInput = false
+                    },
+                    trailing: Button("Save") {
+                        saveActualSavings()
+                    }
+                )
             }
         }
-        .navigationTitle(month.formatted(.dateTime.month().year()))
+    }
+    
+    private func saveActualSavings() {
+        guard let amount = Double(actualSavingsAmount) else { return }
+        
+        if let existingSpending = monthlySpending {
+            existingSpending.actualSavings = amount
+            existingSpending.isMonthComplete = true
+        } else {
+            let targetSavings = goal.requiredMonthlySavings ?? 0
+            let newSpending = MonthlySpending(
+                month: month,
+                actualSavings: amount,
+                targetSavings: targetSavings,
+                isMonthComplete: true
+            )
+            if goal.monthlySpending == nil {
+                goal.monthlySpending = []
+            }
+            goal.monthlySpending?.append(newSpending)
+        }
+        
+        try? modelContext.save()
+        showingActualSavingsInput = false
     }
     
     private func getTransactionsForMonth(_ date: Date) -> [Transaction] {
@@ -995,7 +1402,32 @@ struct AddFinancialGoalView: View {
     }
     
     private var monthlyIncome: Double {
-        totalSelectedIncome
+        let range = MonthRange.forDate(selectedMonth)
+        let filteredIncomes = incomes.filter { income in
+            // Check if the income's first payment is before or during the selected month
+            income.firstPayment <= range.end &&
+            // For monthly incomes, check if they're active in this month
+            (income.frequency == IncomeFrequency.monthly.rawValue ||
+             // For other frequencies, check if they have a payment in this month
+             income.nextPaymentDate >= range.start && income.nextPaymentDate < range.end)
+        }
+        
+        // Debug information
+        print("\nMonthly Income Calculation:")
+        print("Month: \(selectedMonth.formatted(.dateTime.month().year()))")
+        print("Date Range: \(range.start.formatted()) to \(range.end.formatted())")
+        print("\nFiltered Incomes:")
+        for income in filteredIncomes {
+            print("\(income.name ?? "Unnamed"): \(FormattingUtils.formatCurrency(income.amount))")
+            print("  First Payment: \(income.firstPayment.formatted())")
+            print("  Frequency: \(income.frequency ?? "Unknown")")
+            print("  Next Payment: \(income.nextPaymentDate.formatted())")
+        }
+        
+        let total = filteredIncomes.reduce(0.0) { $0 + $1.amount }
+        print("\nTotal Monthly Income: \(FormattingUtils.formatCurrency(total))")
+        
+        return total
     }
     
     private var spending: (needs: Double, wants: Double, notAccounted: Double) {
@@ -1021,12 +1453,133 @@ struct AddFinancialGoalView: View {
         return monthlyIncome * (method.defaultPercentages["Wants"] ?? 0.3)
     }
     
+    private var totalNeeds: Double {
+        let monthBills = getBillsForMonth(selectedMonth)
+        let monthTransactions = getTransactionsForMonth(selectedMonth)
+        
+        print("\n=== Total Needs Calculation ===")
+        
+        // Create a dictionary to track unique bills by name and category
+        var uniqueBills: [String: Bill] = [:]
+        for bill in monthBills {
+            if let name = bill.name {
+                let key = "\(name)_\(bill.category ?? "Uncategorized")"
+                uniqueBills[key] = bill
+            }
+        }
+        
+        print("\nUnique bills found: \(uniqueBills.count)")
+        
+        // Calculate bill needs from unique bills
+        let billNeeds = uniqueBills.values
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .need }
+            .reduce(into: 0.0) { result, bill in
+                let billAmount = (bill.amount ?? 0).rounded(to: 2)
+                let amount = bill.isShared ? (billAmount / Double(bill.numberOfShares)).rounded(to: 2) : billAmount
+                print("\nBill: \(bill.name ?? "Unnamed")")
+                print("Category: \(bill.category ?? "Uncategorized")")
+                print("Original amount: \(billAmount)")
+                print("Is shared: \(bill.isShared)")
+                print("Number of shares: \(bill.numberOfShares)")
+                print("Final amount: \(amount)")
+                result += amount
+                print("Running total: \(result)")
+            }
+        
+        print("\nTotal Bill Needs: \(billNeeds)")
+        
+        // Calculate transaction needs
+        let transactionNeeds = monthTransactions
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .need }
+            .reduce(into: 0.0) { result, transaction in
+                let amount = abs(transaction.amount)
+                print("\nTransaction: \(transaction.name ?? "Unnamed")")
+                print("Category: \(transaction.category ?? "Uncategorized")")
+                print("Amount: \(amount)")
+                result += amount
+                print("Running total: \(result)")
+            }
+        
+        print("\nTotal Transaction Needs: \(transactionNeeds)")
+        
+        let total = billNeeds + transactionNeeds
+        print("\nFinal Total Needs: \(total)")
+        print("=== End Total Needs Calculation ===\n")
+        
+        return total
+    }
+    
+    private var totalWants: Double {
+        let monthBills = getBillsForMonth(selectedMonth)
+        let monthTransactions = getTransactionsForMonth(selectedMonth)
+        
+        // Calculate bill wants
+        let billWants = monthBills
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: true) == .want }
+            .reduce(into: 0.0) { result, bill in
+                let billAmount = (bill.amount ?? 0).rounded(to: 2)
+                let amount = bill.isShared ? (billAmount / Double(bill.numberOfShares)).rounded(to: 2) : billAmount
+                result += amount
+            }
+        
+        // Calculate transaction wants
+        let transactionWants = monthTransactions
+            .filter { goal.getCategoryType(for: $0.category ?? "Uncategorized", isBill: false) == .want }
+            .reduce(into: 0.0) { result, transaction in
+                result += abs(transaction.amount)
+            }
+        
+        return billWants + transactionWants
+    }
+    
+    private var needsProgress: Double {
+        guard targetNeedsAmount > 0 else { return 0 }
+        let progress = totalNeeds / targetNeedsAmount
+        return min(max(progress, 0), 1.0) // Clamp between 0 and 1
+    }
+    
+    private var wantsProgress: Double {
+        guard targetWantsAmount > 0 else { return 0 }
+        let progress = totalWants / targetWantsAmount
+        return min(max(progress, 0), 1.0) // Clamp between 0 and 1
+    }
+    
     private var categorySpending: [String: Double] {
         goal.getCategorySpendingForMonth(selectedMonth) ?? [:]
     }
     
     private var monthlySavings: Double {
-        monthlyIncome - (spending.needs + spending.wants + spending.notAccounted)
+        // Get all transactions and bills for the selected month
+        let monthTransactions = getTransactionsForMonth(selectedMonth)
+        let monthBills = getBillsForMonth(selectedMonth)
+        
+        // Calculate transaction expenses
+        let transactionExpenses = monthTransactions.reduce(into: 0.0) { result, transaction in
+            result += abs(transaction.amount)
+        }
+        
+        // Calculate bill expenses
+        let billExpenses = monthBills.reduce(into: 0.0) { result, bill in
+            // Calculate the actual amount based on whether the bill is shared
+            let billAmount = bill.amount / Double(bill.isShared ? bill.numberOfShares : 1)
+            result += billAmount
+        }
+        
+        // Calculate total expenses
+        let totalExpenses = transactionExpenses + billExpenses
+        
+        // Calculate savings as income minus expenses
+        let savings = monthlyIncome - totalExpenses
+        
+        // Debug information
+        print("\nMonthly Savings Calculation:")
+        print("Monthly Income: \(FormattingUtils.formatCurrency(monthlyIncome))")
+        print("Transaction Expenses: \(FormattingUtils.formatCurrency(transactionExpenses))")
+        print("Bill Expenses: \(FormattingUtils.formatCurrency(billExpenses))")
+        print("Total Expenses: \(FormattingUtils.formatCurrency(totalExpenses))")
+        print("Monthly Savings: \(FormattingUtils.formatCurrency(savings))")
+        
+        return savings
     }
     
     private var requiredMonthlySavings: Double {
@@ -1433,4 +1986,11 @@ struct AddFinancialGoalView: View {
         FinancialGoalsView()
     }
     .modelContainer(PreviewData.createPreviewContainer())
+}
+
+extension Double {
+    func rounded(to places: Int) -> Double {
+        let divisor = pow(10.0, Double(places))
+        return (self * divisor).rounded() / divisor
+    }
 } 
